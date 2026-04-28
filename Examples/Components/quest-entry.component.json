@@ -1,0 +1,34 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "QuestEntry",
+  "description": "Single quest tracker row with title and progress text.",
+  "root": {
+    "type": "QuestEntry",
+    "id": "questEntryRoot",
+    "children": [
+      {
+        "type": "TextBlock",
+        "id": "questTitle",
+        "content": "Return to Ember Keep",
+        "style": {
+          "fontSize": 16,
+          "fontColor": "@color.quest.title"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "questProgress",
+        "content": "2 / 3 Relics",
+        "style": {
+          "fontSize": 14,
+          "fontColor": "@color.quest.progress"
+        }
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Compact quest-tracker row."
+  }
+}

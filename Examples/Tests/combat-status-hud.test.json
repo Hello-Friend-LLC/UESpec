@@ -1,0 +1,25 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Test",
+  "name": "CombatStatusHUD_DefaultPresentation",
+  "description": "Verify default combat status content and resource visibility.",
+  "testSpec": {
+    "target": "CombatStatusHUD",
+    "phases": {
+      "assume": [
+        { "step": "health bar exists", "assertVisible": { "id": "playerHealthBar", "expected": true } },
+        { "step": "resource bar exists", "assertVisible": { "id": "playerResourceBar", "expected": true } }
+      ],
+      "assert": [
+        { "step": "player name is shown", "assertText": { "id": "playerName", "expected": "Knight-01", "match": "Exact" } },
+        { "step": "player level is shown", "assertText": { "id": "playerLevel", "expected": "Lv.18", "match": "Exact" } },
+        { "step": "health label is shown", "assertText": { "id": "playerHealthValue", "expected": "750 / 1000", "match": "Exact" } },
+        { "step": "resource label is shown", "assertText": { "id": "playerResourceValue", "expected": "120 / 300", "match": "Exact" } }
+      ]
+    }
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Smoke test for default combat-status HUD values."
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "StatusEffectIcon",
+  "description": "Buff/debuff icon with a timer label overlay.",
+  "root": {
+    "type": "StatusEffectIcon",
+    "id": "statusEffectIconRoot",
+    "children": [
+      {
+        "type": "Image",
+        "id": "statusEffectIcon",
+        "style": {
+          "tintColor": "@color.status.buff"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "statusEffectTimer",
+        "content": "12s",
+        "style": {
+          "fontSize": 12,
+          "fontColor": "@color.white"
+        }
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Buff icon with remaining duration."
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "ChatLine",
+  "description": "Single chat line with speaker prefix and message body.",
+  "root": {
+    "type": "ChatLine",
+    "id": "chatLineRoot",
+    "children": [
+      {
+        "type": "TextBlock",
+        "id": "chatSpeaker",
+        "content": "[Guild] Mira",
+        "style": {
+          "fontSize": 14,
+          "fontColor": "@color.chat.guild"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "chatMessage",
+        "content": "Meet at Ember Keep in 5.",
+        "style": {
+          "fontSize": 14,
+          "fontColor": "@color.chat.message"
+        }
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Guild chat line."
+  }
+}

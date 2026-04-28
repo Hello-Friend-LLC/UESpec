@@ -1,0 +1,48 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "UESpec",
+	"Description": "AI-driven UI specification tooling for UE5 CommonUI + AngelScript projects.",
+	"Category": "UI",
+	"CreatedBy": "Mithril0rd",
+	"CreatedByURL": "https://github.com/Mithril0rd",
+	"DocsURL": "https://github.com/Mithril0rd/uespec-public",
+	"SupportURL": "https://github.com/Mithril0rd/uespec-public/issues",
+	"EngineVersion": "5.4.0",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "UESpecRuntime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "UESpecEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "UESpecTests",
+			"Type": "DeveloperTool",
+			"LoadingPhase": "PostDefault"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "CommonUI",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModel",
+			"Enabled": true
+		},
+		{
+			"Name": "Angelscript",
+			"Enabled": true
+		}
+	]
+}

@@ -1,0 +1,28 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Test",
+  "name": "InventorySocialOverlayHUD_DefaultPresentation",
+  "description": "Verify equipment slot, tooltip, and guild chat text.",
+  "testSpec": {
+    "target": "InventorySocialOverlayHUD",
+    "phases": {
+      "assume": [
+        { "step": "equipped helmet icon exists", "assertVisible": { "id": "equippedHelmetIcon", "expected": true } },
+        { "step": "item tooltip exists", "assertVisible": { "id": "itemTooltipTitle", "expected": true } }
+      ],
+      "assert": [
+        { "step": "equipment title is shown", "assertText": { "id": "equipmentPanelTitle", "expected": "Loadout", "match": "Exact" } },
+        { "step": "equipped helmet name is shown", "assertText": { "id": "equippedHelmetName", "expected": "Ashen Crown", "match": "Exact" } },
+        { "step": "equipped helmet power is shown", "assertText": { "id": "equippedHelmetPower", "expected": "+412", "match": "Exact" } },
+        { "step": "tooltip title is shown", "assertText": { "id": "itemTooltipTitle", "expected": "Ashen Crown", "match": "Exact" } },
+        { "step": "tooltip summary is shown", "assertText": { "id": "itemTooltipSummary", "expected": "Legendary Helm - Power 412", "match": "Exact" } },
+        { "step": "chat speaker is shown", "assertText": { "id": "chatSpeaker", "expected": "[Guild] Mira", "match": "Exact" } },
+        { "step": "chat message is shown", "assertText": { "id": "chatMessage", "expected": "Meet at Ember Keep in 5.", "match": "Exact" } }
+      ]
+    }
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Smoke test for inventory/social overlay default values."
+  }
+}

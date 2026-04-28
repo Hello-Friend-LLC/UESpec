@@ -1,0 +1,27 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Test",
+  "name": "AdventureOverlayHUD_DefaultPresentation",
+  "description": "Verify target nameplate, damage number, and tracked quest text.",
+  "testSpec": {
+    "target": "AdventureOverlayHUD",
+    "phases": {
+      "assume": [
+        { "step": "buff icon exists", "assertVisible": { "id": "targetBuffIcon", "expected": true } },
+        { "step": "damage number exists", "assertVisible": { "id": "recentDamage", "expected": true } }
+      ],
+      "assert": [
+        { "step": "target name is shown", "assertText": { "id": "targetName", "expected": "Warden of Ash", "match": "Exact" } },
+        { "step": "target level is shown", "assertText": { "id": "targetLevel", "expected": "Lv.42 Elite", "match": "Exact" } },
+        { "step": "target health label is shown", "assertText": { "id": "targetHealthValue", "expected": "1860 / 2400", "match": "Exact" } },
+        { "step": "damage number text is shown", "assertText": { "id": "recentDamage", "expected": "-248!", "match": "Exact" } },
+        { "step": "tracked quest title is shown", "assertText": { "id": "trackedQuestTitle", "expected": "Return to Ember Keep", "match": "Exact" } },
+        { "step": "tracked quest progress is shown", "assertText": { "id": "trackedQuestProgress", "expected": "2 / 3 Relics", "match": "Exact" } }
+      ]
+    }
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Smoke test for adventure overlay default values."
+  }
+}

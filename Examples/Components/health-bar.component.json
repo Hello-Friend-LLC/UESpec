@@ -1,0 +1,37 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "HealthBarComponent",
+  "description": "Reusable ARPG health bar with value label.",
+  "viewModel": {
+    "class": "VM_CombatStatus",
+    "bindingMode": "manual"
+  },
+  "root": {
+    "type": "HealthBar",
+    "id": "playerHealthShell",
+    "style": {
+      "size": ["@size.statusBar.width", "@size.statusBar.height"]
+    },
+    "children": [
+      {
+        "type": "ProgressBar",
+        "id": "playerHealthBar",
+        "content": { "bind": "vm.HealthRatio" },
+        "style": {
+          "fillColor": "@color.health.fill",
+          "backgroundColor": "@color.health.background"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "playerHealthValue",
+        "content": { "bind": "vm.HealthLabel" },
+        "style": {
+          "fontSize": "@size.statusBar.label",
+          "fontColor": "@color.white"
+        }
+      }
+    ]
+  }
+}

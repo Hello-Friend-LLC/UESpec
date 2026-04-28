@@ -1,0 +1,321 @@
+{
+  "apiVersion": "0.2",
+  "kind": "HUD",
+  "name": "Round6ShowcaseHUD",
+  "description": "Integrated Round 6 showcase that wires all 12 built-in components into one ARPG/MMO-ready overlay.",
+  "viewModel": {
+    "class": "VM_Round6Showcase",
+    "bindingMode": "manual"
+  },
+  "root": {
+    "type": "VerticalBox",
+    "id": "round6ShowcaseRoot",
+    "slot": {
+      "anchors": "TopLeft",
+      "alignment": [0.0, 0.0],
+      "offset": [32, 32]
+    },
+    "children": [
+      {
+        "type": "TextBlock",
+        "id": "playerName",
+        "content": { "bind": "vm.PlayerName" },
+        "style": {
+          "fontSize": 20,
+          "fontColor": "@color.white"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "playerLevel",
+        "content": { "bind": "vm.PlayerLevel" },
+        "style": {
+          "fontSize": 14,
+          "fontColor": "@color.ui.hint"
+        }
+      },
+      {
+        "type": "HealthBar",
+        "id": "playerHealthShell",
+        "children": [
+          {
+            "type": "ProgressBar",
+            "id": "playerHealthBar",
+            "content": { "bind": "vm.PlayerHealthRatio" },
+            "style": {
+              "fillColor": "@color.health.fill",
+              "backgroundColor": "@color.health.background"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "playerHealthValue",
+            "content": { "bind": "vm.PlayerHealthLabel" },
+            "style": {
+              "fontSize": "@size.statusBar.label",
+              "fontColor": "@color.white"
+            }
+          }
+        ]
+      },
+      {
+        "type": "ResourceBar",
+        "id": "playerResourceShell",
+        "children": [
+          {
+            "type": "ProgressBar",
+            "id": "playerResourceBar",
+            "content": { "bind": "vm.PlayerResourceRatio" },
+            "style": {
+              "fillColor": "@color.resource.fill",
+              "backgroundColor": "@color.resource.background"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "playerResourceValue",
+            "content": { "bind": "vm.PlayerResourceLabel" },
+            "style": {
+              "fontSize": "@size.statusBar.label",
+              "fontColor": "@color.white"
+            }
+          }
+        ]
+      },
+      {
+        "type": "HorizontalBox",
+        "id": "skillRow",
+        "children": [
+          {
+            "type": "SkillSlot",
+            "id": "primarySkillSlot",
+            "children": [
+              {
+                "type": "TextBlock",
+                "id": "skillKeybind",
+                "content": { "bind": "vm.SkillKeybind" },
+                "style": {
+                  "fontSize": 14,
+                  "fontColor": "@color.white"
+                }
+              }
+            ]
+          },
+          {
+            "type": "RedDot",
+            "id": "skillAlertDot",
+            "visibility": { "bind": "vm.bShowSkillAlert", "convert": "BoolToVisibility" },
+            "style": {
+              "tintColor": "@color.damage.critical"
+            }
+          }
+        ]
+      },
+      {
+        "type": "PlayerNamePlate",
+        "id": "targetNameplate",
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "targetName",
+            "content": { "bind": "vm.TargetName" },
+            "style": {
+              "fontSize": "@size.nameplate.title",
+              "fontColor": "@color.nameplate.enemy"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "targetLevel",
+            "content": { "bind": "vm.TargetLevel" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.ui.hint"
+            }
+          },
+          {
+            "type": "HealthBar",
+            "id": "targetHealthShell",
+            "children": [
+              {
+                "type": "ProgressBar",
+                "id": "targetHealthBar",
+                "content": { "bind": "vm.TargetHealthRatio" },
+                "style": {
+                  "fillColor": "@color.health.fill",
+                  "backgroundColor": "@color.health.background"
+                }
+              },
+              {
+                "type": "TextBlock",
+                "id": "targetHealthValue",
+                "content": { "bind": "vm.TargetHealthLabel" },
+                "style": {
+                  "fontSize": "@size.statusBar.label",
+                  "fontColor": "@color.white"
+                }
+              }
+            ]
+          },
+          {
+            "type": "StatusEffectIcon",
+            "id": "primaryBuffShell",
+            "visibility": { "bind": "vm.bShowPrimaryBuff", "convert": "BoolToVisibility" },
+            "children": [
+              {
+                "type": "Image",
+                "id": "targetBuffIcon",
+                "style": {
+                  "tintColor": "@color.status.buff"
+                }
+              },
+              {
+                "type": "TextBlock",
+                "id": "targetBuffTimer",
+                "content": { "bind": "vm.BuffTimer" },
+                "style": {
+                  "fontSize": 12,
+                  "fontColor": "@color.white"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "DamageNumber",
+        "id": "recentDamage",
+        "content": { "bind": "vm.DamageNumberLabel" },
+        "visibility": { "bind": "vm.bShowDamageNumber", "convert": "BoolToVisibility" },
+        "style": {
+          "fontSize": "@size.damage.large",
+          "fontColor": "@color.damage.critical"
+        }
+      },
+      {
+        "type": "QuestEntry",
+        "id": "trackedQuestRow",
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "trackedQuestTitle",
+            "content": { "bind": "vm.QuestTitle" },
+            "style": {
+              "fontSize": 16,
+              "fontColor": "@color.quest.title"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "trackedQuestProgress",
+            "content": { "bind": "vm.QuestProgress" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.quest.progress"
+            }
+          }
+        ]
+      },
+      {
+        "type": "EquipmentPanel",
+        "id": "equipmentPanelRoot",
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "equipmentPanelTitle",
+            "content": { "bind": "vm.EquipmentPanelTitle" },
+            "style": {
+              "fontSize": 18,
+              "fontColor": "@color.white"
+            }
+          },
+          {
+            "type": "ItemSlot",
+            "id": "equippedItemSlot",
+            "children": [
+              {
+                "type": "Image",
+                "id": "equippedItemIcon",
+                "style": {
+                  "tintColor": "@color.item.legendary"
+                }
+              },
+              {
+                "type": "TextBlock",
+                "id": "equippedItemName",
+                "content": { "bind": "vm.EquippedItemName" },
+                "style": {
+                  "fontSize": 14,
+                  "fontColor": "@color.white"
+                }
+              },
+              {
+                "type": "TextBlock",
+                "id": "equippedItemPower",
+                "content": { "bind": "vm.EquippedItemPower" },
+                "style": {
+                  "fontSize": 12,
+                  "fontColor": "@color.item.legendary"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "ItemTooltip",
+        "id": "itemTooltipRoot",
+        "visibility": { "bind": "vm.bShowTooltip", "convert": "BoolToVisibility" },
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "itemTooltipTitle",
+            "content": { "bind": "vm.TooltipTitle" },
+            "style": {
+              "fontSize": 18,
+              "fontColor": "@color.item.tooltipTitle"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "itemTooltipSummary",
+            "content": { "bind": "vm.TooltipSummary" },
+            "style": {
+              "fontSize": "@size.tooltip.body",
+              "fontColor": "@color.white"
+            }
+          }
+        ]
+      },
+      {
+        "type": "ChatLine",
+        "id": "chatLineRoot",
+        "visibility": { "bind": "vm.bShowChatLine", "convert": "BoolToVisibility" },
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "chatSpeaker",
+            "content": { "bind": "vm.ChatSpeaker" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.chat.guild"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "chatMessage",
+            "content": { "bind": "vm.ChatMessage" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.chat.message"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Unified Round 6 showcase HUD that demonstrates every built-in ARPG/MMO component in one screen."
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "ItemSlot",
+  "description": "Inventory slot with icon, item name, and power text.",
+  "root": {
+    "type": "ItemSlot",
+    "id": "itemSlotRoot",
+    "children": [
+      {
+        "type": "Image",
+        "id": "itemSlotIcon",
+        "style": {
+          "tintColor": "@color.item.legendary"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "itemSlotName",
+        "content": "Ashen Crown",
+        "style": {
+          "fontSize": 14,
+          "fontColor": "@color.white"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "itemSlotPower",
+        "content": "+412",
+        "style": {
+          "fontSize": 12,
+          "fontColor": "@color.item.legendary"
+        }
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Legendary equipment slot."
+  }
+}

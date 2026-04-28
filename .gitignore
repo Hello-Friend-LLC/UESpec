@@ -1,0 +1,23 @@
+# Unreal Engine build outputs
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# IDE / editor state
+.vs/
+.vscode/
+.idea/
+
+# Visual Studio project files
+*.sln
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.suo
+*.user
+
+# OS noise
+.DS_Store
+Thumbs.db

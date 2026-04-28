@@ -1,0 +1,38 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "ResourceBarComponent",
+  "description": "Reusable ARPG mana/rage/energy bar with optional visibility.",
+  "viewModel": {
+    "class": "VM_CombatStatus",
+    "bindingMode": "manual"
+  },
+  "root": {
+    "type": "ResourceBar",
+    "id": "playerResourceShell",
+    "visibility": { "bind": "vm.bShowResourceBar", "convert": "BoolToVisibility" },
+    "style": {
+      "size": ["@size.statusBar.width", "@size.statusBar.height"]
+    },
+    "children": [
+      {
+        "type": "ProgressBar",
+        "id": "playerResourceBar",
+        "content": { "bind": "vm.ResourceRatio" },
+        "style": {
+          "fillColor": "@color.resource.fill",
+          "backgroundColor": "@color.resource.background"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "playerResourceValue",
+        "content": { "bind": "vm.ResourceLabel" },
+        "style": {
+          "fontSize": "@size.statusBar.label",
+          "fontColor": "@color.white"
+        }
+      }
+    ]
+  }
+}

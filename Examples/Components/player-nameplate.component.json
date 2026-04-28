@@ -1,0 +1,58 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "PlayerNamePlate",
+  "description": "Enemy nameplate with title, level label, and health strip.",
+  "root": {
+    "type": "PlayerNamePlate",
+    "id": "playerNameplateRoot",
+    "children": [
+      {
+        "type": "TextBlock",
+        "id": "nameplateName",
+        "content": "Warden of Ash",
+        "style": {
+          "fontSize": "@size.nameplate.title",
+          "fontColor": "@color.nameplate.enemy"
+        }
+      },
+      {
+        "type": "TextBlock",
+        "id": "nameplateLevel",
+        "content": "Lv.42 Elite",
+        "style": {
+          "fontSize": 14,
+          "fontColor": "@color.ui.hint"
+        }
+      },
+      {
+        "type": "HealthBar",
+        "id": "nameplateHealthShell",
+        "children": [
+          {
+            "type": "ProgressBar",
+            "id": "nameplateHealthBar",
+            "content": 0.775,
+            "style": {
+              "fillColor": "@color.health.fill",
+              "backgroundColor": "@color.health.background"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "nameplateHealthLabel",
+            "content": "1860 / 2400",
+            "style": {
+              "fontSize": "@size.statusBar.label",
+              "fontColor": "@color.white"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Elite enemy nameplate with health."
+  }
+}

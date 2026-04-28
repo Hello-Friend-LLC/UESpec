@@ -1,0 +1,121 @@
+{
+  "apiVersion": "0.2",
+  "kind": "HUD",
+  "name": "InventorySocialOverlayHUD",
+  "description": "Equipment panel with tooltip plus a guild chat strip.",
+  "viewModel": {
+    "class": "VM_InventorySocialOverlay",
+    "bindingMode": "manual"
+  },
+  "root": {
+    "type": "VerticalBox",
+    "id": "inventorySocialRoot",
+    "slot": {
+      "anchors": "TopLeft",
+      "alignment": [0.0, 0.0],
+      "offset": [64, 64]
+    },
+    "children": [
+      {
+        "type": "EquipmentPanel",
+        "id": "equipmentPanelRoot",
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "equipmentPanelTitle",
+            "content": { "bind": "vm.EquipmentPanelTitle" },
+            "style": {
+              "fontSize": 18,
+              "fontColor": "@color.white"
+            }
+          },
+          {
+            "type": "ItemSlot",
+            "id": "equippedHelmetSlot",
+            "children": [
+              {
+                "type": "Image",
+                "id": "equippedHelmetIcon",
+                "style": {
+                  "tintColor": "@color.item.legendary"
+                }
+              },
+              {
+                "type": "TextBlock",
+                "id": "equippedHelmetName",
+                "content": { "bind": "vm.EquippedHelmetName" },
+                "style": {
+                  "fontSize": 14,
+                  "fontColor": "@color.white"
+                }
+              },
+              {
+                "type": "TextBlock",
+                "id": "equippedHelmetPower",
+                "content": { "bind": "vm.EquippedHelmetPower" },
+                "style": {
+                  "fontSize": 12,
+                  "fontColor": "@color.item.legendary"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "ItemTooltip",
+        "id": "itemTooltipRoot",
+        "visibility": { "bind": "vm.bShowTooltip", "convert": "BoolToVisibility" },
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "itemTooltipTitle",
+            "content": { "bind": "vm.TooltipTitle" },
+            "style": {
+              "fontSize": 18,
+              "fontColor": "@color.item.tooltipTitle"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "itemTooltipSummary",
+            "content": { "bind": "vm.TooltipSummary" },
+            "style": {
+              "fontSize": "@size.tooltip.body",
+              "fontColor": "@color.white"
+            }
+          }
+        ]
+      },
+      {
+        "type": "ChatLine",
+        "id": "chatLineRoot",
+        "visibility": { "bind": "vm.bShowChatLine", "convert": "BoolToVisibility" },
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "chatSpeaker",
+            "content": { "bind": "vm.ChatSpeaker" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.chat.guild"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "chatMessage",
+            "content": { "bind": "vm.ChatMessage" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.chat.message"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Inventory overlay with equipped item, tooltip, and guild chat line."
+  }
+}

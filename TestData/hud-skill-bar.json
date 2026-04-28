@@ -1,0 +1,208 @@
+{
+  "apiVersion": "0.2",
+  "kind": "HUD",
+  "name": "SkillBarHUD",
+  "description": "ARPG player skill bar. 4 active skill slots mapped to Q/W/E/R.",
+  "resolutions": ["1920x1080", "2560x1440"],
+  "viewModel": {
+    "class": "VM_SkillBar",
+    "scope": "PlayerState",
+    "fields": [
+      { "name": "skills", "type": "TArray<FSkillSlotState>", "notify": true },
+      { "name": "selectedIndex", "type": "int", "default": -1 }
+    ],
+    "methods": [
+      { "name": "UseSkill", "params": [{ "name": "index", "type": "int" }], "pure": false },
+      { "name": "IsSkillReady", "params": [{ "name": "index", "type": "int" }], "pure": true },
+      { "name": "IsSkillLocked", "params": [{ "name": "index", "type": "int" }], "pure": true }
+    ]
+  },
+  "styleTokens": {
+    "slot.size": [80, 80],
+    "slot.gap": 8,
+    "slot.borderWidth": 2,
+    "cooldownTextSize": 28
+  },
+  "stateMachine": {
+    "initial": "Normal",
+    "states": [
+      {
+        "name": "Normal",
+        "transitions": [
+          { "to": "Cooldown", "when": "onSkillUsed" },
+          { "to": "Disabled", "when": "vm.IsSkillLocked(0)" }
+        ]
+      },
+      {
+        "name": "Cooldown",
+        "transitions": [
+          { "to": "Normal", "when": "vm.IsSkillReady(0)" }
+        ]
+      },
+      {
+        "name": "Disabled",
+        "transitions": [
+          { "to": "Normal", "when": "vm.IsSkillLocked(0)" }
+        ]
+      }
+    ]
+  },
+  "root": {
+    "type": "HorizontalBox",
+    "id": "skillRow",
+    "slot": {
+      "anchors": "BottomCenter",
+      "alignment": [0.5, 1.0],
+      "offset": [0, -32]
+    },
+    "children": [
+      {
+        "type": "SkillSlot",
+        "id": "slotQ",
+        "slot": { "padding": [4, 0, 4, 0] },
+        "style": {
+          "size": "@slot.size",
+          "borderColor": "@color.ui.border",
+          "borderWidth": "@slot.borderWidth"
+        },
+        "navigation": { "focusable": true, "right": "slotW" },
+        "children": [
+          {
+            "type": "Image",
+            "id": "slotQ_icon",
+            "slot": { "anchors": "Fill" },
+            "content": { "bind": "skills[0].iconPath", "fallback": "T_SkillPlaceholder" }
+          },
+          {
+            "type": "ProgressBar",
+            "id": "slotQ_cooldownBar",
+            "slot": { "anchors": "Fill" },
+            "visibility": { "bind": "skills[0].isOnCooldown", "convert": "BoolToVisibility" },
+            "content": { "bind": "skills[0].cooldownProgress", "convert": "Percent" },
+            "style": { "fillColor": "@color.cooldownOverlay", "fillDirection": "TopToBottom" }
+          },
+          {
+            "type": "TextBlock",
+            "id": "slotQ_cooldownText",
+            "slot": { "anchors": "Center" },
+            "visibility": { "bind": "skills[0].isOnCooldown", "convert": "BoolToVisibility" },
+            "content": { "bind": "skills[0].cooldownRemaining", "convert": "TimeFormat", "fallback": "" },
+            "style": { "fontSize": "@cooldownTextSize", "fontColor": "@color.white" }
+          },
+          {
+            "type": "TextBlock",
+            "id": "slotQ_keybind",
+            "slot": { "anchors": "BottomRight", "padding": [0, 0, 4, 2] },
+            "content": "Q",
+            "style": { "fontSize": 16, "fontColor": "@color.ui.hint" }
+          },
+          {
+            "type": "RedDot",
+            "id": "slotQ_redDot",
+            "slot": { "anchors": "TopRight", "padding": [0, -4, -4, 0] },
+            "visibility": { "bind": "skills[0].hasUnseenUpgrade", "convert": "BoolToVisibility" }
+          }
+        ],
+        "actions": [
+          {
+            "on": "Clicked",
+            "do": "vm.UseSkill(0)",
+            "guard": "vm.IsSkillReady(0)",
+            "sound": "@sound.uiClick",
+            "cooldown": 0.05
+          },
+          {
+            "on": "Hovered",
+            "do": { "openLayer": "SkillTooltip" }
+          }
+        ],
+        "stateBindings": {
+          "Cooldown": { "opacity": 0.6, "saturation": 0.3 },
+          "Disabled": { "opacity": 0.25, "saturation": 0.0 }
+        }
+      },
+      {
+        "type": "SkillSlot",
+        "id": "slotW",
+        "slot": { "padding": [4, 0, 4, 0] },
+        "style": {
+          "size": "@slot.size",
+          "borderColor": "@color.ui.border",
+          "borderWidth": "@slot.borderWidth"
+        },
+        "navigation": { "focusable": true, "left": "slotQ", "right": "slotE" },
+        "children": [
+          {
+            "type": "Image",
+            "id": "slotW_icon",
+            "slot": { "anchors": "Fill" },
+            "content": { "bind": "skills[1].iconPath", "fallback": "T_SkillPlaceholder" }
+          },
+          {
+            "type": "TextBlock",
+            "id": "slotW_keybind",
+            "slot": { "anchors": "BottomRight", "padding": [0, 0, 4, 2] },
+            "content": "W",
+            "style": { "fontSize": 16, "fontColor": "@color.ui.hint" }
+          }
+        ]
+      },
+      {
+        "type": "SkillSlot",
+        "id": "slotE",
+        "slot": { "padding": [4, 0, 4, 0] },
+        "style": {
+          "size": "@slot.size",
+          "borderColor": "@color.ui.border",
+          "borderWidth": "@slot.borderWidth"
+        },
+        "navigation": { "focusable": true, "left": "slotW", "right": "slotR" },
+        "children": [
+          {
+            "type": "Image",
+            "id": "slotE_icon",
+            "slot": { "anchors": "Fill" },
+            "content": { "bind": "skills[2].iconPath", "fallback": "T_SkillPlaceholder" }
+          },
+          {
+            "type": "TextBlock",
+            "id": "slotE_keybind",
+            "slot": { "anchors": "BottomRight", "padding": [0, 0, 4, 2] },
+            "content": "E",
+            "style": { "fontSize": 16, "fontColor": "@color.ui.hint" }
+          }
+        ]
+      },
+      {
+        "type": "SkillSlot",
+        "id": "slotR",
+        "slot": { "padding": [4, 0, 4, 0] },
+        "style": {
+          "size": "@slot.size",
+          "borderColor": "@color.ui.border",
+          "borderWidth": "@slot.borderWidth"
+        },
+        "navigation": { "focusable": true, "left": "slotE" },
+        "children": [
+          {
+            "type": "Image",
+            "id": "slotR_icon",
+            "slot": { "anchors": "Fill" },
+            "content": { "bind": "skills[3].iconPath", "fallback": "T_SkillPlaceholder" }
+          },
+          {
+            "type": "TextBlock",
+            "id": "slotR_keybind",
+            "slot": { "anchors": "BottomRight", "padding": [0, 0, 4, 2] },
+            "content": "R",
+            "style": { "fontSize": 16, "fontColor": "@color.ui.hint" }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-testdata",
+    "sourcePrompt": "ARPG bottom skill bar with Q/W/E/R hotkeys, cooldown, lock state, and tooltip behavior."
+  }
+}

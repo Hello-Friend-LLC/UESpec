@@ -1,0 +1,47 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "EquipmentPanel",
+  "description": "Equipment column with section title and item slot.",
+  "root": {
+    "type": "EquipmentPanel",
+    "id": "equipmentPanelRoot",
+    "children": [
+      {
+        "type": "TextBlock",
+        "id": "equipmentPanelTitle",
+        "content": "Loadout",
+        "style": {
+          "fontSize": 18,
+          "fontColor": "@color.white"
+        }
+      },
+      {
+        "type": "ItemSlot",
+        "id": "equippedHelmetSlot",
+        "children": [
+          {
+            "type": "Image",
+            "id": "equippedHelmetIcon",
+            "style": {
+              "tintColor": "@color.item.legendary"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "equippedHelmetName",
+            "content": "Ashen Crown",
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.white"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Basic equipment panel with one legendary helmet slot."
+  }
+}

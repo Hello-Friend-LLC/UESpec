@@ -1,0 +1,136 @@
+{
+  "apiVersion": "0.2",
+  "kind": "HUD",
+  "name": "AdventureOverlayHUD",
+  "description": "Enemy nameplate plus tracked quest strip and floating damage number.",
+  "viewModel": {
+    "class": "VM_AdventureOverlay",
+    "bindingMode": "manual"
+  },
+  "root": {
+    "type": "VerticalBox",
+    "id": "adventureOverlayRoot",
+    "slot": {
+      "anchors": "TopLeft",
+      "alignment": [0.0, 0.0],
+      "offset": [48, 48]
+    },
+    "children": [
+      {
+        "type": "PlayerNamePlate",
+        "id": "targetNameplate",
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "targetName",
+            "content": { "bind": "vm.TargetName" },
+            "style": {
+              "fontSize": "@size.nameplate.title",
+              "fontColor": "@color.nameplate.enemy"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "targetLevel",
+            "content": { "bind": "vm.TargetLevelLabel" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.ui.hint"
+            }
+          },
+          {
+            "type": "HealthBar",
+            "id": "targetHealthShell",
+            "children": [
+              {
+                "type": "ProgressBar",
+                "id": "targetHealthBar",
+                "content": { "bind": "vm.TargetHealthRatio" },
+                "style": {
+                  "fillColor": "@color.health.fill",
+                  "backgroundColor": "@color.health.background"
+                }
+              },
+              {
+                "type": "TextBlock",
+                "id": "targetHealthValue",
+                "content": { "bind": "vm.TargetHealthLabel" },
+                "style": {
+                  "fontSize": "@size.statusBar.label",
+                  "fontColor": "@color.white"
+                }
+              }
+            ]
+          },
+          {
+            "type": "HorizontalBox",
+            "id": "targetStatusRow",
+            "children": [
+              {
+                "type": "StatusEffectIcon",
+                "id": "primaryBuffShell",
+                "visibility": { "bind": "vm.bShowPrimaryBuff", "convert": "BoolToVisibility" },
+                "children": [
+                  {
+                    "type": "Image",
+                    "id": "targetBuffIcon",
+                    "style": {
+                      "tintColor": "@color.status.buff"
+                    }
+                  },
+                  {
+                    "type": "TextBlock",
+                    "id": "targetBuffTimer",
+                    "content": { "bind": "vm.PrimaryBuffTimerLabel" },
+                    "style": {
+                      "fontSize": 12,
+                      "fontColor": "@color.white"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "DamageNumber",
+        "id": "recentDamage",
+        "content": { "bind": "vm.DamageNumberLabel" },
+        "visibility": { "bind": "vm.bShowDamageNumber", "convert": "BoolToVisibility" },
+        "style": {
+          "fontSize": "@size.damage.large",
+          "fontColor": "@color.damage.critical"
+        }
+      },
+      {
+        "type": "QuestEntry",
+        "id": "trackedQuestRow",
+        "children": [
+          {
+            "type": "TextBlock",
+            "id": "trackedQuestTitle",
+            "content": { "bind": "vm.TrackedQuestTitle" },
+            "style": {
+              "fontSize": 16,
+              "fontColor": "@color.quest.title"
+            }
+          },
+          {
+            "type": "TextBlock",
+            "id": "trackedQuestProgress",
+            "content": { "bind": "vm.TrackedQuestProgress" },
+            "style": {
+              "fontSize": 14,
+              "fontColor": "@color.quest.progress"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Adventure overlay with enemy nameplate, buff timer, floating damage number, and tracked quest row."
+  }
+}

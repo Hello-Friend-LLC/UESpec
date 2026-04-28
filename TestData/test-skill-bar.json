@@ -1,0 +1,53 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Test",
+  "name": "SkillBarHUD_ClickToUseSkill",
+  "description": "Verify clicking the Q slot calls vm.UseSkill(0) and transitions to Cooldown state when skill is ready; is no-op when on cooldown.",
+  "testSpec": {
+    "target": "SkillBarHUD",
+    "timeout": { "step": 3, "phase": 15, "total": 60 },
+    "parameters": [
+      {
+        "name": "WhenReady",
+        "vmState": {
+          "skills[0].isReady": true,
+          "skills[0].isOnCooldown": false,
+          "skills[0].isLocked": false
+        }
+      },
+      {
+        "name": "WhenCooldown",
+        "vmState": {
+          "skills[0].isReady": false,
+          "skills[0].isOnCooldown": true,
+          "skills[0].cooldownRemaining": 5.0
+        }
+      }
+    ],
+    "phases": {
+      "assume": [
+        { "step": "skill bar is visible", "assertVisible": { "id": "skillRow" } },
+        { "step": "Q slot is present", "assertVisible": { "id": "slotQ" } }
+      ],
+      "arrange": [
+        { "step": "give Q slot focus", "focus": "slotQ" },
+        { "step": "initial state is Normal or Cooldown", "waitForState": { "state": "Normal", "timeout": 2 } }
+      ],
+      "act": [
+        { "step": "click Q slot", "click": "slotQ" }
+      ],
+      "assert": [
+        { "step": "[WhenReady] transitions to Cooldown", "assertState": { "expected": "Cooldown" } },
+        { "step": "[WhenReady] cooldown bar becomes visible", "waitForVisible": { "id": "slotQ_cooldownBar", "timeout": 1 } },
+        { "step": "icon is dimmed in Cooldown state", "assertStyle": { "id": "slotQ", "property": "opacity", "expected": 0.6 } },
+        { "step": "keybind label still shows Q", "assertText": { "id": "slotQ_keybind", "expected": "Q", "match": "Exact" } },
+        { "step": "focus remains on Q slot after click", "assertFocus": { "expected": "slotQ" } },
+        { "step": "capture screenshot for visual regression", "screenshot": { "name": "cooldown_state", "compareTo": "baselines/SkillBarHUD_cooldown.png", "tolerance": 0.02 } }
+      ]
+    }
+  },
+  "meta": {
+    "generatedBy": "uespec-testdata",
+    "sourcePrompt": "Test SkillBarHUD Q-slot click behavior across ready and cooldown states."
+  }
+}

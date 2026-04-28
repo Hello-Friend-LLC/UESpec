@@ -1,0 +1,19 @@
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "DamageNumber",
+  "description": "Floating combat delta text for hit, crit, or heal events.",
+  "root": {
+    "type": "DamageNumber",
+    "id": "damageNumberRoot",
+    "content": "-248!",
+    "style": {
+      "fontSize": "@size.damage.large",
+      "fontColor": "@color.damage.critical"
+    }
+  },
+  "meta": {
+    "generatedBy": "uespec-round6",
+    "sourcePrompt": "Floating critical-hit damage number."
+  }
+}
