@@ -2,6 +2,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "UESpecJsonCompat.h"
 #include "UESpecTestHelpers.h"
 
 namespace
@@ -434,7 +435,10 @@ bool FUESpecCompilerAcceptValidTestSpecTest::RunTest(const FString& Parameters)
 	if (AssertStyleObject && (*AssertStyleObject).IsValid())
 	{
 		TArray<FString> AssertStyleKeys;
-		(*AssertStyleObject)->Values.GetKeys(AssertStyleKeys);
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*(*AssertStyleObject)))
+		{
+			AssertStyleKeys.Add(Pair.Key);
+		}
 		AssertStyleKeys.Sort();
 		TestTrue(TEXT("assertStyle keeps property lowercase"), (*AssertStyleObject)->HasField(TEXT("property")));
 		const bool bContainsUpperProperty = AssertStyleKeys.ContainsByPredicate([](const FString& Key)

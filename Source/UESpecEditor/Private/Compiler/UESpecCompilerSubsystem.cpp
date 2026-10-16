@@ -18,6 +18,7 @@
 #include "Components/Widget.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "UESpecJsonCompat.h"
 #include "WidgetBlueprintFactory.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Internationalization/Regex.h"
@@ -575,7 +576,7 @@ namespace UE::UESpec::Editor::Private
 			return;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : StyleTokensObject->Values)
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*StyleTokensObject))
 		{
 			if (Pair.Key.IsEmpty())
 			{
@@ -652,7 +653,7 @@ namespace UE::UESpec::Editor::Private
 		if (Value->Type == EJson::Object)
 		{
 			const TSharedPtr<FJsonObject> ObjectValue = Value->AsObject();
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : ObjectValue->Values)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*ObjectValue))
 			{
 				ValidateStyleTokenValue(Pair.Value, MakeChildPath(Path, Pair.Key), KnownTokenNames, CandidateTokens, OutResult);
 			}
@@ -703,7 +704,7 @@ namespace UE::UESpec::Editor::Private
 				}
 			}
 
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : ObjectValue->Values)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*ObjectValue))
 			{
 				ValidateConverterReferences(Pair.Value, MakeChildPath(Path, Pair.Key), ConverterNames, CandidateConverters, OutResult);
 			}
@@ -818,7 +819,7 @@ namespace UE::UESpec::Editor::Private
 		TSharedPtr<FJsonObject> StyleObject;
 		if (TryGetObjectField(NodeObject, TEXT("style"), StyleObject))
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : StyleObject->Values)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*StyleObject))
 			{
 				ValidateStyleTokenValue(Pair.Value, MakeChildPath(MakeChildPath(NodePath, TEXT("style")), Pair.Key), KnownStyleTokenNames, StyleTokenCandidates, OutResult);
 			}
@@ -827,7 +828,7 @@ namespace UE::UESpec::Editor::Private
 		TSharedPtr<FJsonObject> SlotObject;
 		if (TryGetObjectField(NodeObject, TEXT("slot"), SlotObject))
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : SlotObject->Values)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*SlotObject))
 			{
 				ValidateStyleTokenValue(Pair.Value, MakeChildPath(MakeChildPath(NodePath, TEXT("slot")), Pair.Key), KnownStyleTokenNames, StyleTokenCandidates, OutResult);
 			}
@@ -857,7 +858,7 @@ namespace UE::UESpec::Editor::Private
 		TSharedPtr<FJsonObject> StateBindingsObject;
 		if (TryGetObjectField(NodeObject, TEXT("stateBindings"), StateBindingsObject))
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : StateBindingsObject->Values)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*StateBindingsObject))
 			{
 				if (!StateNames.Contains(Pair.Key))
 				{
@@ -909,7 +910,7 @@ namespace UE::UESpec::Editor::Private
 		TSharedPtr<FJsonObject> StateBindingsObject;
 		if (!WidgetId.IsEmpty() && TryGetObjectField(NodeObject, TEXT("stateBindings"), StateBindingsObject))
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& StatePair : StateBindingsObject->Values)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& StatePair : UE::UESpec::Json::GetFields(*StateBindingsObject))
 			{
 				const TSharedPtr<FJsonObject>* PropertyObject = nullptr;
 				if (!StatePair.Value.IsValid() || !StatePair.Value->TryGetObject(PropertyObject) || !PropertyObject || !(*PropertyObject).IsValid())
@@ -921,7 +922,7 @@ namespace UE::UESpec::Editor::Private
 				Binding.WidgetId = FName(*WidgetId);
 				Binding.State = FName(*StatePair.Key);
 
-				for (const TPair<FString, TSharedPtr<FJsonValue>>& PropertyPair : (*PropertyObject)->Values)
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& PropertyPair : UE::UESpec::Json::GetFields(*(*PropertyObject)))
 				{
 					FUESpecStateBindingProperty& PropertyBinding = Binding.Properties.AddDefaulted_GetRef();
 					PropertyBinding.Property = FName(*PropertyPair.Key);
@@ -1318,7 +1319,7 @@ void UUESpecCompilerSubsystem::NormalizeObject(TSharedPtr<FJsonObject> JsonObjec
 	}
 
 	TMap<FString, TSharedPtr<FJsonValue>> NormalizedValues;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : JsonObject->Values)
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*JsonObject))
 	{
 		const FString NormalizedKey = NormalizePropertyKeyForContext(ParentKey, Pair.Key);
 		bChanged |= NormalizedKey != Pair.Key;
@@ -1328,7 +1329,11 @@ void UUESpecCompilerSubsystem::NormalizeObject(TSharedPtr<FJsonObject> JsonObjec
 		NormalizedValues.Add(NormalizedKey, Pair.Value);
 	}
 
-	JsonObject->Values = MoveTemp(NormalizedValues);
+	JsonObject->Values.Reset();
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : NormalizedValues)
+	{
+		JsonObject->SetField(Pair.Key, Pair.Value);
+	}
 }
 
 void UUESpecCompilerSubsystem::CollectVmActionReferences(const TSharedPtr<FJsonValue>& JsonValue, const FString& CurrentPath, TMap<FString, FString>& OutReferences)
@@ -1341,7 +1346,7 @@ void UUESpecCompilerSubsystem::CollectVmActionReferences(const TSharedPtr<FJsonV
 	if (JsonValue->Type == EJson::Object)
 	{
 		const TSharedPtr<FJsonObject> JsonObject = JsonValue->AsObject();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : JsonObject->Values)
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*JsonObject))
 		{
 			const FString ChildPath = CurrentPath.IsEmpty() ? Pair.Key : CurrentPath + TEXT(".") + Pair.Key;
 			if (Pair.Key == TEXT("do") && Pair.Value.IsValid() && Pair.Value->Type == EJson::String)
@@ -2066,7 +2071,7 @@ void UUESpecCompilerSubsystem::CollectLocalStyleTokens(const TSharedPtr<FJsonObj
 		return;
 	}
 
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : StyleTokensObject->Values)
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*StyleTokensObject))
 	{
 		OutLocalStyleTokens.Add(Pair.Key, Pair.Value);
 	}
@@ -2511,7 +2516,7 @@ void UUESpecCompilerSubsystem::ValidateActionDoValue(const TSharedPtr<FJsonValue
 	{
 		const TSharedPtr<FJsonObject> ActionBlockObject = DoValue->AsObject();
 		int32 PrimitiveCount = 0;
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : ActionBlockObject->Values)
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*ActionBlockObject))
 		{
 			if (UE::UESpec::Editor::Private::ActionPrimitiveKeys.Contains(Pair.Key))
 			{
@@ -2591,7 +2596,7 @@ void UUESpecCompilerSubsystem::ValidateTestSteps(const TArray<TSharedPtr<FJsonVa
 
 		TArray<FString> InvalidKeys;
 		TArray<FString> ValidVerbKeys;
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*StepObject)->Values)
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*(*StepObject)))
 		{
 			if (Pair.Key == TEXT("step"))
 			{

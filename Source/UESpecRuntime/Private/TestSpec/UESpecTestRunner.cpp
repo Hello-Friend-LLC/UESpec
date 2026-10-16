@@ -12,6 +12,7 @@
 #include "Components/Widget.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "UESpecJsonCompat.h"
 #include "Engine/Engine.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/FileManager.h"
@@ -320,7 +321,7 @@ namespace
 			return StepDescription;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : StepObject->Values)
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*StepObject))
 		{
 			if (Pair.Key != TEXT("step"))
 			{
@@ -1622,7 +1623,7 @@ bool FUESpecTestRunner::ApplyParameterViewModelState(UUserWidget& RootWidget, co
 		return true;
 	}
 
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*VmStateObject)->Values)
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : UE::UESpec::Json::GetFields(*(*VmStateObject)))
 	{
 		if (!SetObjectPathValue(*ViewModel, Pair.Key, Pair.Value, OutFailureMessage))
 		{
