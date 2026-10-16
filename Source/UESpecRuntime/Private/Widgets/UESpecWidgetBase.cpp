@@ -11,6 +11,7 @@
 #include "UESpecSignalBus.h"
 #include "UObject/UnrealType.h"
 #include "View/MVVMView.h"
+#include "View/MVVMViewClass.h"
 #include "ViewModel/UESpecViewModelBase.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(UESpecWidgetBase)
@@ -101,25 +102,104 @@ namespace UE::UESpec::Private
 		return InstanceBindings;
 	}
 
-	void InitializeViewModelInstance(UUserWidget& Widget, TSoftClassPtr<UUESpecViewModelBase> ViewModelClass, FName ViewModelContext, TObjectPtr<UUESpecViewModelBase>& ViewModelInstance)
+	// HF (WI-1586 t221, FND-01490): an `mvvm`-mode spec compiles its ViewModel as an MVVM source the view creates
+	// itself (CreateInstance and the other non-Manual creation types), which SetViewModel refuses ("The new viewmodel
+	// <Name> cannot be set."). For such a source the view's instance is the only bound ViewModel, so UESpec adopts it
+	// instead of creating a second, unbound one. Returns true when the view owns the source; OutViewModel is then the
+	// view's current instance (null until UMVVMView::Construct has initialised its sources).
+	static bool FindViewOwnedViewModel(const UUserWidget& Widget, const UClass* ViewModelClass, const FName ViewModelContext, UUESpecViewModelBase*& OutViewModel)
 	{
-		if (ViewModelInstance)
+		OutViewModel = nullptr;
+
+		const UMVVMView* const View = Widget.GetExtension<UMVVMView>();
+		const UMVVMViewClass* const ViewClass = View ? View->GetViewClass() : nullptr;
+		if (!ViewClass)
+		{
+			return false;
+		}
+
+		const FMVVMViewClass_Source* MatchedSource = nullptr;
+		for (const FMVVMViewClass_Source& ClassSource : ViewClass->GetSources())
+		{
+			if (!ClassSource.IsViewModel())
+			{
+				continue;
+			}
+
+			if (!ViewModelContext.IsNone() && ClassSource.GetName() == ViewModelContext)
+			{
+				MatchedSource = &ClassSource;
+				break;
+			}
+
+			// Same fallback order as SetViewModelByClass: the first ViewModel source the class can fill.
+			if (!MatchedSource && ViewModelClass && ClassSource.GetSourceClass() && ViewModelClass->IsChildOf(ClassSource.GetSourceClass()))
+			{
+				MatchedSource = &ClassSource;
+			}
+		}
+
+		if (!MatchedSource || MatchedSource->CanBeSet())
+		{
+			return false;
+		}
+
+		OutViewModel = Cast<UUESpecViewModelBase>(View->GetViewModel(MatchedSource->GetName()).GetObject());
+		return true;
+	}
+
+	static void ResolveViewModelSettings(const UUserWidget& Widget, TSoftClassPtr<UUESpecViewModelBase>& ViewModelClass, FName& ViewModelContext)
+	{
+		if (!ViewModelClass.IsNull())
 		{
 			return;
 		}
 
-		if (ViewModelClass.IsNull())
+		if (const UUESpecWidgetBase* const WidgetDefaults = GetWidgetBaseDefaults(Widget))
 		{
-			if (const UUESpecWidgetBase* const WidgetDefaults = GetWidgetBaseDefaults(Widget))
+			ViewModelClass = WidgetDefaults->ViewModelClass;
+			ViewModelContext = WidgetDefaults->ViewModelContext;
+		}
+		else if (const UUESpecActivatableWidgetBase* const ActivatableDefaults = GetActivatableWidgetBaseDefaults(Widget))
+		{
+			ViewModelClass = ActivatableDefaults->ViewModelClass;
+			ViewModelContext = ActivatableDefaults->ViewModelContext;
+		}
+	}
+
+	static UUESpecViewModelBase* GetBoundOrOwnedViewModel(const UUserWidget& Widget, TSoftClassPtr<UUESpecViewModelBase> ViewModelClass, FName ViewModelContext, UUESpecViewModelBase* ViewModelInstance)
+	{
+		ResolveViewModelSettings(Widget, ViewModelClass, ViewModelContext);
+
+		UUESpecViewModelBase* ViewOwnedViewModel = nullptr;
+		if (FindViewOwnedViewModel(Widget, ViewModelClass.Get(), ViewModelContext, ViewOwnedViewModel) && ViewOwnedViewModel)
+		{
+			// The view may recreate its instance (Destruct -> Construct); always hand out the live one.
+			return ViewOwnedViewModel;
+		}
+
+		return ViewModelInstance;
+	}
+
+	void InitializeViewModelInstance(UUserWidget& Widget, TSoftClassPtr<UUESpecViewModelBase> ViewModelClass, FName ViewModelContext, TObjectPtr<UUESpecViewModelBase>& ViewModelInstance)
+	{
+		ResolveViewModelSettings(Widget, ViewModelClass, ViewModelContext);
+
+		UUESpecViewModelBase* ViewOwnedViewModel = nullptr;
+		if (FindViewOwnedViewModel(Widget, ViewModelClass.Get(), ViewModelContext, ViewOwnedViewModel))
+		{
+			// Adopt (or refresh to) the view's instance; before the view's sources exist this stays null and
+			// NativeConstruct, which runs after the extension Construct, adopts it.
+			if (ViewOwnedViewModel)
 			{
-				ViewModelClass = WidgetDefaults->ViewModelClass;
-				ViewModelContext = WidgetDefaults->ViewModelContext;
+				ViewModelInstance = ViewOwnedViewModel;
 			}
-			else if (const UUESpecActivatableWidgetBase* const ActivatableDefaults = GetActivatableWidgetBaseDefaults(Widget))
-			{
-				ViewModelClass = ActivatableDefaults->ViewModelClass;
-				ViewModelContext = ActivatableDefaults->ViewModelContext;
-			}
+			return;
+		}
+
+		if (ViewModelInstance)
+		{
+			return;
 		}
 
 		if (ViewModelClass.IsNull())
@@ -1254,7 +1334,7 @@ FName UUESpecWidgetBase::GetUIState() const
 
 UUESpecViewModelBase* UUESpecWidgetBase::GetUESpecViewModel() const
 {
-	return ViewModelInstance;
+	return UE::UESpec::Private::GetBoundOrOwnedViewModel(*this, ViewModelClass, ViewModelContext, ViewModelInstance);
 }
 
 void UUESpecWidgetBase::RefreshUESpecBindings()
@@ -1398,7 +1478,7 @@ FName UUESpecActivatableWidgetBase::GetUIState() const
 
 UUESpecViewModelBase* UUESpecActivatableWidgetBase::GetUESpecViewModel() const
 {
-	return ViewModelInstance;
+	return UE::UESpec::Private::GetBoundOrOwnedViewModel(*this, ViewModelClass, ViewModelContext, ViewModelInstance);
 }
 
 void UUESpecActivatableWidgetBase::RefreshUESpecBindings()
