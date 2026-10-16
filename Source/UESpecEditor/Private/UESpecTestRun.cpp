@@ -11,6 +11,7 @@
 #include "Editor.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/App.h"
 #include "Misc/Paths.h"
 #include "UObject/UObjectIterator.h"
 #include "WidgetBlueprint.h"
@@ -176,7 +177,12 @@ namespace
 			.AutoCenter(EAutoCenter::None)
 			.SizingRule(ESizingRule::Autosized);
 		OutWindow->SetContent(RootWidget->TakeWidget());
-		FSlateApplication::Get().AddWindow(OutWindow.ToSharedRef(), false);
+		// HF (WI-1586 t606): when the app can render, FUESpecTestRunner::ExecuteClick/hover/press dispatch real Slate
+		// pointer events, and Slate never hit-tests a hidden window: the click then lands on whatever visible window
+		// sits under the point (the editor), is reported handled, and the target Button's OnClicked never fires.
+		// Show the window in that case (as the UESpecTests fixtures do); headless runs keep it hidden and click via
+		// OnClicked.Broadcast().
+		FSlateApplication::Get().AddWindow(OutWindow.ToSharedRef(), FApp::CanEverRender());
 		FSlateApplication::Get().Tick();
 
 		return RootWidget;
