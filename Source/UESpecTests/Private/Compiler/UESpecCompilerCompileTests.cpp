@@ -1,6 +1,8 @@
 #include "Misc/AutomationTest.h"
 
 #include "Blueprint/WidgetTree.h"
+#include "Dom/JsonObject.h"
+#include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -44,6 +46,102 @@ namespace
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
 		return FFileHelper::SaveStringToFile(JsonText, *FilePath);
 	}
+
+	static void StripBindExpressions(const TSharedPtr<FJsonObject>& NodeObject)
+	{
+		if (!NodeObject.IsValid())
+		{
+			return;
+		}
+
+		static const TCHAR* const BindableKeys[] = { TEXT("content"), TEXT("visibility") };
+		for (const TCHAR* const Key : BindableKeys)
+		{
+			const TSharedPtr<FJsonObject>* FieldObject = nullptr;
+			if (NodeObject->TryGetObjectField(Key, FieldObject) && FieldObject && (*FieldObject).IsValid() && (*FieldObject)->HasField(TEXT("bind")))
+			{
+				NodeObject->RemoveField(Key);
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* ChildrenArray = nullptr;
+		if (NodeObject->TryGetArrayField(TEXT("children"), ChildrenArray) && ChildrenArray)
+		{
+			for (const TSharedPtr<FJsonValue>& ChildValue : *ChildrenArray)
+			{
+				const TSharedPtr<FJsonObject>* ChildObject = nullptr;
+				if (ChildValue.IsValid() && ChildValue->TryGetObject(ChildObject) && ChildObject)
+				{
+					StripBindExpressions(*ChildObject);
+				}
+			}
+		}
+	}
+
+	// hud-skill-bar.json binds indexed paths (skills[0].cooldownProgress), which the compiler rejects with UNSUPPORTED_BINDING_PATH.
+	// Tests about the rest of the HUD compile a copy with every bind expression removed.
+	static bool WriteBindFreeHudSkillBarSpec(FString& OutSpecPath)
+	{
+		FString JsonText;
+		TSharedPtr<FJsonObject> RootObject;
+		if (!LoadTextFile(GetTestDataPath(TEXT("hud-skill-bar.json")), JsonText) || !ParseJsonObject(JsonText, RootObject) || !RootObject.IsValid())
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject>* RootWidget = nullptr;
+		if (RootObject->TryGetObjectField(TEXT("root"), RootWidget) && RootWidget)
+		{
+			StripBindExpressions(*RootWidget);
+		}
+
+		FString StrippedJson;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&StrippedJson);
+		if (!FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer))
+		{
+			return false;
+		}
+
+		OutSpecPath = BuildTempSpecPath(TEXT("hud-skill-bar-bind-free"));
+		return SaveTempSpecFile(OutSpecPath, StrippedJson);
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUESpecCompilerCompileIndexedBindPathFailsTest,
+	"UESpec.Compiler.Compile.IndexedBindPathFails",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUESpecCompilerCompileIndexedBindPathFailsTest::RunTest(const FString& Parameters)
+{
+	FScopedRegistryOverride RegistryOverride;
+	UUESpecCompilerSubsystem* Compiler = GetCompilerSubsystem(*this);
+	if (!Compiler)
+	{
+		return false;
+	}
+
+	const FString SpecPath = GetTestDataPath(TEXT("hud-skill-bar.json"));
+	FUESpecCompilerResult Result;
+	const FString UniqueOutputDirectory = FString::Printf(TEXT("/Game/UESpecTests/%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	const bool bCompiled = Compiler->CompileJsonFileToWidgetBlueprint(SpecPath, UniqueOutputDirectory, Result);
+
+	TestFalse(TEXT("HUD example with indexed bind paths does not compile"), bCompiled);
+	TestFalse(TEXT("Compiler reports bOk=false"), Result.bOk);
+	TestEqual(TEXT("No generated asset is returned"), Result.GeneratedAssets.Num(), 0);
+	TestFalse(TEXT("No asset is left at the deterministic path"), FPackageName::DoesPackageExist(FString::Printf(TEXT("%s/WBP_SkillBarHUD"), *UniqueOutputDirectory)));
+
+	bool bFoundCooldownProgress = false;
+	for (const FUESpecCompilerError& Error : Result.Errors)
+	{
+		if (Error.Code == TEXT("UNSUPPORTED_BINDING_PATH") && Error.Message.Contains(TEXT("skills[0].cooldownProgress")))
+		{
+			bFoundCooldownProgress = true;
+		}
+	}
+
+	TestTrue(TEXT("skills[0].cooldownProgress reports UNSUPPORTED_BINDING_PATH"), bFoundCooldownProgress);
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -60,8 +158,12 @@ bool FUESpecCompilerCompileMinimalHudTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	const FString SpecPath = GetTestDataPath(TEXT("hud-skill-bar.json"));
-	TestTrue(TEXT("hud-skill-bar.json exists"), FPaths::FileExists(SpecPath));
+	FString SpecPath;
+	TestTrue(TEXT("bind-free hud-skill-bar.json copy is written"), WriteBindFreeHudSkillBarSpec(SpecPath));
+	ON_SCOPE_EXIT
+	{
+		IFileManager::Get().Delete(*SpecPath, false, true, true);
+	};
 	if (!FPaths::FileExists(SpecPath))
 	{
 		return false;
@@ -126,8 +228,12 @@ bool FUESpecCompilerCompileWritesStateMachineDefaultsTest::RunTest(const FString
 		return false;
 	}
 
-	const FString SpecPath = GetTestDataPath(TEXT("hud-skill-bar.json"));
-	TestTrue(TEXT("hud-skill-bar.json exists"), FPaths::FileExists(SpecPath));
+	FString SpecPath;
+	TestTrue(TEXT("bind-free hud-skill-bar.json copy is written"), WriteBindFreeHudSkillBarSpec(SpecPath));
+	ON_SCOPE_EXIT
+	{
+		IFileManager::Get().Delete(*SpecPath, false, true, true);
+	};
 	if (!FPaths::FileExists(SpecPath))
 	{
 		return false;

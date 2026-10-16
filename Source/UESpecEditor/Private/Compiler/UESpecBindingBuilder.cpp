@@ -33,6 +33,7 @@ namespace UE::UESpec::Editor::BindingBuilderPrivate
 		FString BindPath;
 		FString ConverterName;
 		FString DestinationPropertyName;
+		bool bIsContent = false;
 	};
 
 	struct FBuildContext
@@ -112,6 +113,18 @@ namespace UE::UESpec::Editor::BindingBuilderPrivate
 		return BindPath.Contains(TEXT("[")) || BindPath.Contains(TEXT("]")) || BindPath.Contains(TEXT("(")) || BindPath.Contains(TEXT(")"));
 	}
 
+	// Matches the runtime manual-binding resolver (UESpecWidgetBase NormalizeBindingPath): an optional "vm." prefix names the ViewModel itself.
+	static FString NormalizeBindPath(const FString& BindPath)
+	{
+		FString NormalizedPath = BindPath.TrimStartAndEnd();
+		if (NormalizedPath.StartsWith(TEXT("vm.")))
+		{
+			NormalizedPath.RightChopInline(3, EAllowShrinking::No);
+		}
+
+		return NormalizedPath;
+	}
+
 	static bool ResolveFieldPathSegments(UStruct* RootStruct, const FString& BindPath, TArray<UE::MVVM::FMVVMConstFieldVariant>& OutFields)
 	{
 		OutFields.Reset();
@@ -165,7 +178,7 @@ namespace UE::UESpec::Editor::BindingBuilderPrivate
 	static bool BuildSourcePath(FBuildContext& Context, const FString& BindPath, FMVVMBlueprintPropertyPath& OutSourcePath)
 	{
 		TArray<UE::MVVM::FMVVMConstFieldVariant> Fields;
-		if (!ResolveFieldPathSegments(Context.ViewModelClass, BindPath, Fields))
+		if (!ResolveFieldPathSegments(Context.ViewModelClass, NormalizeBindPath(BindPath), Fields))
 		{
 			return false;
 		}
@@ -257,37 +270,51 @@ namespace UE::UESpec::Editor::BindingBuilderPrivate
 		FMVVMBlueprintPropertyPath SourcePath;
 		if (!BuildSourcePath(Context, Target.BindPath, SourcePath))
 		{
-			UE_LOG(LogUESpecBindingBuilder, Warning, TEXT("Skipping unsupported or unresolved bind path '%s' at %s."), *Target.BindPath, *Target.JsonPath);
+			// ReportInvalidBindingTargets already recorded UNSUPPORTED_BINDING_PATH / UNRESOLVED_BINDING_PATH for this target.
 			return true;
 		}
 
 		FMVVMBlueprintPropertyPath DestinationPath;
 		if (!BuildDestinationPath(Context, *Widget, Target.DestinationPropertyName, DestinationPath))
 		{
-			UE_LOG(LogUESpecBindingBuilder, Warning, TEXT("Skipping unsupported destination property '%s' for widget '%s' at %s."), *Target.DestinationPropertyName, *Target.WidgetName.ToString(), *Target.JsonPath);
+			AddError(
+				Context,
+				TEXT("UNSUPPORTED_BINDING_TARGET"),
+				Target.JsonPath,
+				FString::Printf(TEXT("Widget '%s' has no bindable property '%s'."), *Target.WidgetName.ToString(), *Target.DestinationPropertyName),
+				TEXT("Bind content on a TextBlock or ProgressBar, or bind visibility."));
 			return true;
+		}
+
+		UFunction* ConverterFunction = nullptr;
+		if (!Target.ConverterName.IsEmpty())
+		{
+			ConverterFunction = ResolveConverterFunction(Target.ConverterName);
+			if (!ConverterFunction)
+			{
+				AddError(Context, TEXT("CONVERTER_FUNCTION_NOT_FOUND"), Target.JsonPath, FString::Printf(TEXT("Converter '%s' is declared but no runtime conversion function was found."), *Target.ConverterName), TEXT("Implement the converter in UUESpecConverterLibrary or remove the convert field."));
+				return false;
+			}
+
+			if (!Context.MVVMEditorSubsystem->IsValidConversionFunction(&Context.WidgetBlueprint, ConverterFunction, SourcePath, DestinationPath))
+			{
+				AddError(
+					Context,
+					TEXT("INVALID_CONVERTER"),
+					MakeChildPath(Target.JsonPath, TEXT("convert")),
+					FString::Printf(TEXT("Converter '%s' cannot convert bind path '%s' to %s.%s."), *Target.ConverterName, *Target.BindPath, *Target.WidgetName.ToString(), *Target.DestinationPropertyName),
+					TEXT("Pick a converter whose input matches the ViewModel field type and whose output matches the widget property."));
+				return true;
+			}
 		}
 
 		FMVVMBlueprintViewBinding& Binding = Context.MVVMEditorSubsystem->AddBinding(&Context.WidgetBlueprint);
 		Context.MVVMEditorSubsystem->SetDestinationPathForBinding(&Context.WidgetBlueprint, Binding, DestinationPath, false);
 		Context.MVVMEditorSubsystem->SetBindingTypeForBinding(&Context.WidgetBlueprint, Binding, EMVVMBindingMode::OneWayToDestination);
 
-		if (Target.ConverterName.IsEmpty())
-		{
-			Context.MVVMEditorSubsystem->SetSourcePathForBinding(&Context.WidgetBlueprint, Binding, SourcePath);
-			return true;
-		}
-
-		UFunction* const ConverterFunction = ResolveConverterFunction(Target.ConverterName);
 		if (!ConverterFunction)
 		{
-			AddError(Context, TEXT("CONVERTER_FUNCTION_NOT_FOUND"), Target.JsonPath, FString::Printf(TEXT("Converter '%s' is declared but no runtime conversion function was found."), *Target.ConverterName), TEXT("Implement the converter in UUESpecConverterLibrary or remove the convert field."));
-			return false;
-		}
-
-		if (!Context.MVVMEditorSubsystem->IsValidConversionFunction(&Context.WidgetBlueprint, ConverterFunction, SourcePath, DestinationPath))
-		{
-			UE_LOG(LogUESpecBindingBuilder, Warning, TEXT("Skipping binding at %s because converter '%s' is not valid for the source/destination types."), *Target.JsonPath, *Target.ConverterName);
+			Context.MVVMEditorSubsystem->SetSourcePathForBinding(&Context.WidgetBlueprint, Binding, SourcePath);
 			return true;
 		}
 
@@ -328,6 +355,7 @@ namespace UE::UESpec::Editor::BindingBuilderPrivate
 				BindingTarget.BindPath = BindPath;
 				BindingTarget.ConverterName = ConverterName;
 				BindingTarget.DestinationPropertyName = TEXT("Text");
+				BindingTarget.bIsContent = true;
 
 				FString WidgetType;
 				NodeObject->TryGetStringField(TEXT("type"), WidgetType);
@@ -449,6 +477,77 @@ namespace UE::UESpec::Editor::BindingBuilderPrivate
 			ApplyBindingDefaultsToWidget(*ActivatableDefaults, BindingMode, Targets);
 		}
 	}
+
+	// "content" binds by the generated widget's class, so registered components deriving from UTextBlock/UProgressBar (DamageNumber) bind too.
+	static void ResolveContentDestination(const FBuildContext& Context, FBindingTarget& Target)
+	{
+		if (!Target.bIsContent || !Context.WidgetBlueprint.WidgetTree)
+		{
+			return;
+		}
+
+		const UWidget* const Widget = Context.WidgetBlueprint.WidgetTree->FindWidget(Target.WidgetName);
+		if (!Widget)
+		{
+			return;
+		}
+
+		if (Widget->IsA<UProgressBar>())
+		{
+			Target.DestinationPropertyName = TEXT("Percent");
+		}
+		else if (Widget->IsA<UTextBlock>())
+		{
+			Target.DestinationPropertyName = TEXT("Text");
+		}
+		else
+		{
+			Target.DestinationPropertyName.Reset();
+		}
+	}
+
+	// Both binding modes reject the same targets: a skipped binding is a compile error, never a warning (the widget would silently never update).
+	// Returns true when the target can be generated.
+	static bool ReportInvalidBindingTarget(FBuildContext& Context, const FBindingTarget& Target)
+	{
+		bool bValid = true;
+
+		if (Target.DestinationPropertyName.IsEmpty())
+		{
+			AddError(
+				Context,
+				TEXT("UNSUPPORTED_BINDING_TARGET"),
+				Target.JsonPath,
+				FString::Printf(TEXT("Widget '%s' has no bindable destination for '%s'."), *Target.WidgetName.ToString(), *Target.BindPath),
+				TEXT("Bind content only on a TextBlock (Text) or ProgressBar (Percent); visibility binds on any widget."));
+			bValid = false;
+		}
+
+		if (IsUnsupportedBindingExpression(Target.BindPath))
+		{
+			AddError(
+				Context,
+				TEXT("UNSUPPORTED_BINDING_PATH"),
+				MakeChildPath(Target.JsonPath, TEXT("bind")),
+				FString::Printf(TEXT("Bind path '%s' uses an index or call expression ([ ] ( )), which bindings do not support."), *Target.BindPath),
+				TEXT("Bind a flat ViewModel field (for example expose the indexed value as its own field on the ViewModel)."));
+			return false;
+		}
+
+		TArray<UE::MVVM::FMVVMConstFieldVariant> Fields;
+		if (!ResolveFieldPathSegments(Context.ViewModelClass, NormalizeBindPath(Target.BindPath), Fields))
+		{
+			AddError(
+				Context,
+				TEXT("UNRESOLVED_BINDING_PATH"),
+				MakeChildPath(Target.JsonPath, TEXT("bind")),
+				FString::Printf(TEXT("Bind path '%s' does not resolve to a property of ViewModel class '%s'."), *Target.BindPath, *GetNameSafe(Context.ViewModelClass)),
+				TEXT("Check the field name and casing against the ViewModel class; nested segments must be struct or object properties."));
+			return false;
+		}
+
+		return bValid;
+	}
 }
 
 bool FUESpecBindingBuilder::Build(UWidgetBlueprint& WidgetBlueprint, const TSharedPtr<FJsonObject>& RootObject, FUESpecCompilerResult& OutResult)
@@ -480,6 +579,16 @@ bool FUESpecBindingBuilder::Build(UWidgetBlueprint& WidgetBlueprint, const TShar
 	TArray<FBindingTarget> Targets;
 	CollectBindingTargetsFromNode(RootWidgetNode, TEXT("root"), Targets);
 
+	TArray<const FBindingTarget*> ValidTargets;
+	for (FBindingTarget& Target : Targets)
+	{
+		ResolveContentDestination(Context, Target);
+		if (ReportInvalidBindingTarget(Context, Target))
+		{
+			ValidTargets.Add(&Target);
+		}
+	}
+
 	const EUESpecBindingMode BindingMode = GetBindingMode(ViewModelObject);
 	ApplyBindingDefaults(WidgetBlueprint, BindingMode, Targets);
 	if (BindingMode == EUESpecBindingMode::Manual)
@@ -507,21 +616,9 @@ bool FUESpecBindingBuilder::Build(UWidgetBlueprint& WidgetBlueprint, const TShar
 		return false;
 	}
 
-	for (const FBindingTarget& Target : Targets)
+	for (const FBindingTarget* Target : ValidTargets)
 	{
-		if (Target.DestinationPropertyName.IsEmpty())
-		{
-			UE_LOG(LogUESpecBindingBuilder, Warning, TEXT("Skipping unsupported binding destination at %s."), *Target.JsonPath);
-			continue;
-		}
-
-		if (IsUnsupportedBindingExpression(Target.BindPath))
-		{
-			UE_LOG(LogUESpecBindingBuilder, Warning, TEXT("Skipping unsupported complex bind expression '%s' at %s."), *Target.BindPath, *Target.JsonPath);
-			continue;
-		}
-
-		if (!CreateBindingForTarget(Context, Target))
+		if (!CreateBindingForTarget(Context, *Target))
 		{
 			return false;
 		}

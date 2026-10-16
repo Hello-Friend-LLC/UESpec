@@ -33,6 +33,49 @@ namespace
 		const UMVVMWidgetBlueprintExtension_View* const Extension = UMVVMWidgetBlueprintExtension_View::GetExtension<UMVVMWidgetBlueprintExtension_View>(&WidgetBlueprint);
 		return Extension ? Extension->GetBlueprintView() : nullptr;
 	}
+
+	static TArray<const FUESpecCompilerError*> FindBindingErrors(const FUESpecCompilerResult& Result, const FString& Code)
+	{
+		TArray<const FUESpecCompilerError*> Matches;
+		for (const FUESpecCompilerError& Error : Result.Errors)
+		{
+			if (Error.Code == Code)
+			{
+				Matches.Add(&Error);
+			}
+		}
+
+		return Matches;
+	}
+
+	// Compiles an inline spec that must fail; returns the result and deletes any asset a buggy compile leaves behind.
+	static FUESpecCompilerResult CompileExpectingFailure(FAutomationTestBase& Test, UUESpecCompilerSubsystem& Compiler, const FString& SpecName, const FString& JsonText)
+	{
+		const FString SpecPath = BuildTempBindingSpecPath(SpecName);
+		ON_SCOPE_EXIT
+		{
+			IFileManager::Get().Delete(*SpecPath, false, true, true);
+		};
+
+		Test.TestTrue(FString::Printf(TEXT("%s writes to disk"), *SpecName), SaveTempBindingSpec(SpecPath, JsonText));
+
+		FUESpecCompilerResult Result;
+		const FString UniqueOutputDirectory = FString::Printf(TEXT("/Game/UESpecTests/%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+		const bool bCompiled = Compiler.CompileJsonFileToWidgetBlueprint(SpecPath, UniqueOutputDirectory, Result);
+		Test.TestFalse(FString::Printf(TEXT("%s compile fails"), *SpecName), bCompiled);
+		Test.TestFalse(FString::Printf(TEXT("%s reports bOk=false"), *SpecName), Result.bOk);
+		Test.TestEqual(FString::Printf(TEXT("%s returns no generated asset"), *SpecName), Result.GeneratedAssets.Num(), 0);
+
+		for (const FString& AssetPath : Result.GeneratedAssets)
+		{
+			if (UWidgetBlueprint* const Leftover = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath))
+			{
+				ObjectTools::DeleteSingleObject(Leftover, false);
+			}
+		}
+
+		return Result;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -336,5 +379,102 @@ bool FUESpecCompilerBindingVisibilityWithConverterTest::RunTest(const FString& P
 
 	const UMVVMBlueprintViewConversionFunction* const Conversion = Binding.Conversion.GetConversionFunction(true);
 	TestNotNull(TEXT("Visibility binding creates a conversion function"), Conversion);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUESpecCompilerBindingUnresolvedPathFailsTest,
+	"UESpec.Compiler.Binding.UnresolvedPathFails",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUESpecCompilerBindingUnresolvedPathFailsTest::RunTest(const FString& Parameters)
+{
+	UUESpecCompilerSubsystem* Compiler = GetCompilerSubsystem(*this);
+	if (!Compiler)
+	{
+		return false;
+	}
+
+	// Manual mode, as the shipped examples use: "vm.SkillLabel" must resolve (runtime strips "vm."), "vm.NoSuchField" must not.
+	const FUESpecCompilerResult Result = CompileExpectingFailure(*this, *Compiler, TEXT("BindingUnresolvedPathSpec"), TEXT(R"JSON(
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "BindingUnresolvedPathSpec",
+  "viewModel": { "class": "VM_SkillBar", "bindingMode": "manual", "scope": "PlayerState" },
+  "root": {
+    "type": "VerticalBox",
+    "id": "rootPanel",
+    "children": [
+      { "type": "TextBlock", "id": "goodLabel", "content": { "bind": "vm.SkillLabel" } },
+      { "type": "TextBlock", "id": "badLabel", "content": { "bind": "vm.NoSuchField" } }
+    ]
+  }
+}
+)JSON"));
+
+	const TArray<const FUESpecCompilerError*> Errors = FindBindingErrors(Result, TEXT("UNRESOLVED_BINDING_PATH"));
+	TestEqual(TEXT("Exactly one UNRESOLVED_BINDING_PATH error"), Errors.Num(), 1);
+	if (Errors.Num() == 1)
+	{
+		TestTrue(TEXT("Error names the unresolved path"), Errors[0]->Message.Contains(TEXT("vm.NoSuchField")));
+		TestEqual(TEXT("Error points at the bind field"), Errors[0]->Path, FString(TEXT("root.children[1].content.bind")));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUESpecCompilerBindingUnsupportedTargetFailsTest,
+	"UESpec.Compiler.Binding.UnsupportedTargetFails",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUESpecCompilerBindingUnsupportedTargetFailsTest::RunTest(const FString& Parameters)
+{
+	UUESpecCompilerSubsystem* Compiler = GetCompilerSubsystem(*this);
+	if (!Compiler)
+	{
+		return false;
+	}
+
+	const FUESpecCompilerResult Result = CompileExpectingFailure(*this, *Compiler, TEXT("BindingUnsupportedTargetSpec"), TEXT(R"JSON(
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "BindingUnsupportedTargetSpec",
+  "viewModel": { "class": "VM_SkillBar", "scope": "PlayerState" },
+  "root": { "type": "Image", "id": "skillIcon", "content": { "bind": "SkillLabel" } }
+}
+)JSON"));
+
+	TestEqual(TEXT("Image content bind reports UNSUPPORTED_BINDING_TARGET"), FindBindingErrors(Result, TEXT("UNSUPPORTED_BINDING_TARGET")).Num(), 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUESpecCompilerBindingInvalidConverterFailsTest,
+	"UESpec.Compiler.Binding.InvalidConverterFails",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUESpecCompilerBindingInvalidConverterFailsTest::RunTest(const FString& Parameters)
+{
+	UUESpecCompilerSubsystem* Compiler = GetCompilerSubsystem(*this);
+	if (!Compiler)
+	{
+		return false;
+	}
+
+	// BoolToVisibility returns ESlateVisibility, which cannot feed TextBlock.Text.
+	const FUESpecCompilerResult Result = CompileExpectingFailure(*this, *Compiler, TEXT("BindingInvalidConverterSpec"), TEXT(R"JSON(
+{
+  "apiVersion": "0.2",
+  "kind": "Component",
+  "name": "BindingInvalidConverterSpec",
+  "viewModel": { "class": "VM_SkillBar", "scope": "PlayerState" },
+  "root": { "type": "TextBlock", "id": "cooldownLabel", "content": { "bind": "bShowCooldown", "convert": "BoolToVisibility" } }
+}
+)JSON"));
+
+	TestEqual(TEXT("Mistyped converter reports INVALID_CONVERTER"), FindBindingErrors(Result, TEXT("INVALID_CONVERTER")).Num(), 1);
 	return true;
 }
