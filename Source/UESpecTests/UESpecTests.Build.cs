@@ -23,6 +23,7 @@ namespace UnrealBuildTool.Rules
 					"InputCore",
 					"Json",
 					"ModelViewViewModelBlueprint",
+					"Projects",
 					"Slate",
 					"SlateCore",
 					"UMG",

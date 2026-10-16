@@ -3,6 +3,7 @@
 #include "Compiler/UESpecCompilerSubsystem.h"
 #include "Components/UESpecArpgWidgets.h"
 #include "Editor.h"
+#include "Interfaces/IPluginManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Registry/UESpecComponentRegistry.h"
@@ -31,12 +32,26 @@ namespace UE::UESpec::Tests
 		return Compiler;
 	}
 
+	// HF port: the plugin lives under Engine/Plugins/HF_Plugins/UESpec, not Engine/Plugins/UESpec,
+	// so resolve its base dir through the plugin manager instead of guessing the folder.
+	static FString GetUESpecPluginBaseDir()
+	{
+		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UESpec"));
+		return Plugin.IsValid() ? Plugin->GetBaseDir() : FString();
+	}
+
 	static FString GetTestDataPath(const FString& FileName)
 	{
 		const FString ProjectCandidate = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("UESpec"), TEXT("TestData"), FileName);
 		if (FPaths::FileExists(ProjectCandidate))
 		{
 			return ProjectCandidate;
+		}
+
+		const FString PluginDir = GetUESpecPluginBaseDir();
+		if (!PluginDir.IsEmpty())
+		{
+			return FPaths::Combine(PluginDir, TEXT("TestData"), FileName);
 		}
 
 		return FPaths::Combine(FPaths::EnginePluginsDir(), TEXT("UESpec"), TEXT("TestData"), FileName);
@@ -48,6 +63,12 @@ namespace UE::UESpec::Tests
 		if (FPaths::FileExists(ProjectCandidate))
 		{
 			return ProjectCandidate;
+		}
+
+		const FString PluginDir = GetUESpecPluginBaseDir();
+		if (!PluginDir.IsEmpty())
+		{
+			return FPaths::Combine(PluginDir, RelativePath);
 		}
 
 		return FPaths::Combine(FPaths::EnginePluginsDir(), TEXT("UESpec"), RelativePath);

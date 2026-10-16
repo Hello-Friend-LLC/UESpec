@@ -97,7 +97,7 @@ namespace
 		OutFixture.RootWidget->WidgetTree->RootWidget = RootPanel;
 		OutFixture.Window = SNew(SWindow).AutoCenter(EAutoCenter::None).SizingRule(ESizingRule::Autosized);
 		OutFixture.Window->SetContent(OutFixture.RootWidget->TakeWidget());
-		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), false);
+		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), true);
 		FSlateApplication::Get().Tick();
 		return true;
 	}
@@ -126,7 +126,7 @@ namespace
 
 		OutFixture.Window = SNew(SWindow).AutoCenter(EAutoCenter::None).SizingRule(ESizingRule::Autosized);
 		OutFixture.Window->SetContent(OutFixture.RootWidget->TakeWidget());
-		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), false);
+		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), true);
 		FSlateApplication::Get().Tick();
 		return true;
 	}
@@ -155,7 +155,7 @@ namespace
 
 		OutFixture.Window = SNew(SWindow).AutoCenter(EAutoCenter::None).SizingRule(ESizingRule::Autosized);
 		OutFixture.Window->SetContent(OutFixture.RootWidget->TakeWidget());
-		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), false);
+		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), true);
 		FSlateApplication::Get().Tick();
 		return true;
 	}
@@ -184,7 +184,7 @@ namespace
 
 		OutFixture.Window = SNew(SWindow).AutoCenter(EAutoCenter::None).SizingRule(ESizingRule::Autosized);
 		OutFixture.Window->SetContent(OutFixture.RootWidget->TakeWidget());
-		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), false);
+		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), true);
 		FSlateApplication::Get().Tick();
 		return true;
 	}
@@ -213,7 +213,7 @@ namespace
 
 		OutFixture.Window = SNew(SWindow).AutoCenter(EAutoCenter::None).SizingRule(ESizingRule::Autosized);
 		OutFixture.Window->SetContent(OutFixture.RootWidget->TakeWidget());
-		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), false);
+		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), true);
 		FSlateApplication::Get().Tick();
 		return true;
 	}
@@ -242,7 +242,7 @@ namespace
 
 		OutFixture.Window = SNew(SWindow).AutoCenter(EAutoCenter::None).SizingRule(ESizingRule::Autosized);
 		OutFixture.Window->SetContent(OutFixture.RootWidget->TakeWidget());
-		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), false);
+		FSlateApplication::Get().AddWindow(OutFixture.Window.ToSharedRef(), true);
 		FSlateApplication::Get().Tick();
 		return true;
 	}

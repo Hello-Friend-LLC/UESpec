@@ -66,7 +66,9 @@ namespace UE::UESpec::Tests
 			FilePair.AbsolutePath = StagedAbsolutePath;
 			FilePair.RelativePath = StagedRelativePath;
 			Manager.FileChangesDetectedForReload.AddUnique(FilePair);
-			Manager.LastFileChangeDetectedTime = FPlatformTime::Seconds();
+			// HF port: the fork's CheckForHotReload returns early when the last change is < 0.025 s old
+			// (non-checker-thread mode); backdate it so the queued file reloads on this call.
+			Manager.LastFileChangeDetectedTime = FPlatformTime::Seconds() - 1.0;
 			Manager.CheckForHotReload(ECompileType::FullReload);
 
 			if (ExpectedClassName.IsEmpty())
