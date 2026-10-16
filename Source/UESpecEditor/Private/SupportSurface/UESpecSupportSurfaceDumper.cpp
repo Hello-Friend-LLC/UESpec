@@ -144,16 +144,16 @@ namespace UE::UESpec::Private
 	{
 		OutMarkdown += TEXT("## Actions") LINE_TERMINATOR;
 		OutMarkdown += TEXT("### Events") LINE_TERMINATOR;
-		for (const FString& EventName : Snapshot.ActionEvents)
+		for (const FUESpecSurfaceActionEntry& Entry : Snapshot.ActionEvents)
 		{
-			OutMarkdown += FString::Printf(TEXT("- %s"), *EventName) + LINE_TERMINATOR;
+			OutMarkdown += FString::Printf(TEXT("- %s%s"), *Entry.Name, Entry.IsSupported() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *Entry.Status)) + LINE_TERMINATOR;
 		}
 		OutMarkdown += LINE_TERMINATOR;
 
 		OutMarkdown += TEXT("### Primitives") LINE_TERMINATOR;
-		for (const FString& PrimitiveName : Snapshot.ActionPrimitives)
+		for (const FUESpecSurfaceActionEntry& Entry : Snapshot.ActionPrimitives)
 		{
-			OutMarkdown += FString::Printf(TEXT("- %s"), *PrimitiveName) + LINE_TERMINATOR;
+			OutMarkdown += FString::Printf(TEXT("- %s%s"), *Entry.Name, Entry.IsSupported() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *Entry.Status)) + LINE_TERMINATOR;
 		}
 		OutMarkdown += LINE_TERMINATOR;
 	}

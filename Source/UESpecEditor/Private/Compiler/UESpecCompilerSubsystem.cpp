@@ -43,6 +43,7 @@
 #include "Registry/UESpecComponentRegistry.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "UESpecConverterLibrary.h"
 #include "UESpecSupportSurfaceSubsystem.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/SavePackage.h"
@@ -712,6 +713,16 @@ namespace UE::UESpec::Editor::Private
 							FString::Printf(TEXT("Converter '%s' is not registered in the support surface."), *ConverterName),
 							TEXT("Register the converter in ComponentRegistry.Converters or use one of the known converter names."),
 							UUESpecCompilerSubsystem::BuildNearestSuggestions(ConverterName, CandidateConverters));
+					}
+					else if (!UUESpecConverterLibrary::StaticClass()->FindFunctionByName(FName(*FString::Printf(TEXT("Conv_%s"), *ConverterName))))
+					{
+						// Compile (MVVM) and the manual-binding runtime both resolve converters only as UUESpecConverterLibrary::Conv_<Name>.
+						UUESpecCompilerSubsystem::AddError(
+							OutResult,
+							TEXT("INVALID_CONVERTER"),
+							MakeChildPath(Path, TEXT("convert")),
+							FString::Printf(TEXT("Converter '%s' is registered but has no Conv_%s function in UUESpecConverterLibrary."), *ConverterName, *ConverterName),
+							TEXT("Implement the converter in UUESpecConverterLibrary or use one of the implemented converter names."));
 					}
 				}
 			}
@@ -2892,6 +2903,26 @@ void UUESpecCompilerSubsystem::ValidateActions(const TArray<TSharedPtr<FJsonValu
 			continue;
 		}
 
+		FString EventName;
+		if ((*ActionObject)->TryGetStringField(TEXT("on"), EventName))
+		{
+			static const TArray<FUESpecSurfaceActionEntry> EventSurface = UUESpecSupportSurfaceSubsystem::GetActionEventSurface();
+			const FUESpecSurfaceActionEntry* const EventEntry = EventSurface.FindByPredicate([&EventName](const FUESpecSurfaceActionEntry& Entry)
+			{
+				return Entry.Name == EventName;
+			});
+
+			if (EventEntry && !EventEntry->IsSupported())
+			{
+				AddError(
+					OutResult,
+					TEXT("UNSUPPORTED_EVENT"),
+					UE::UESpec::Editor::Private::MakeChildPath(UE::UESpec::Editor::Private::MakeArrayPath(ActionsPath, ActionIndex), TEXT("on")),
+					FString::Printf(TEXT("Action event '%s' is declared in the schema but not implemented by the compiler."), *EventName),
+					TEXT("Use Clicked, Pressed, Released, Hovered or Unhovered."));
+			}
+		}
+
 		const TSharedPtr<FJsonValue>* DoValue = (*ActionObject)->Values.Find(TEXT("do"));
 		if (DoValue && DoValue->IsValid())
 		{
@@ -2933,6 +2964,23 @@ void UUESpecCompilerSubsystem::ValidateActionDoValue(const TSharedPtr<FJsonValue
 			if (UE::UESpec::Editor::Private::ActionPrimitiveKeys.Contains(Pair.Key))
 			{
 				++PrimitiveCount;
+
+				static const TArray<FUESpecSurfaceActionEntry> PrimitiveSurface = UUESpecSupportSurfaceSubsystem::GetActionPrimitiveSurface();
+				const FString& PrimitiveName = Pair.Key;
+				const FUESpecSurfaceActionEntry* const PrimitiveEntry = PrimitiveSurface.FindByPredicate([&PrimitiveName](const FUESpecSurfaceActionEntry& Entry)
+				{
+					return Entry.Name == PrimitiveName;
+				});
+
+				if (PrimitiveEntry && !PrimitiveEntry->IsSupported())
+				{
+					AddError(
+						OutResult,
+						TEXT("UNSUPPORTED_ACTION"),
+						UE::UESpec::Editor::Private::MakeChildPath(DoPath, PrimitiveName),
+						FString::Printf(TEXT("Action primitive '%s' is declared in the schema but not implemented by the compiler."), *PrimitiveName),
+						TEXT("Use openLayer, closeLayer, setState, callVM or emitSignal."));
+				}
 			}
 		}
 

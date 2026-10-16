@@ -312,6 +312,50 @@ UESPEC_DEFINE_REJECT_TEST(
 	TEXT(R"JSON({"apiVersion":"0.2","kind":"Component","name":"BadDelete","deletions":["slotQ"],"root":{"type":"TextBlock","id":"slotQ","content":"Q"}})JSON"),
 	TEXT("DELETION_CONFLICT"))
 
+UESPEC_DEFINE_REJECT_TEST(
+	FUESpecCompilerRejectUnimplementedEventTest,
+	"UESpec.Compiler.Reject.UnimplementedEvent",
+	TEXT(R"JSON({"apiVersion":"0.2","kind":"Component","name":"BadEvent","root":{"type":"Button","id":"slotQ","actions":[{"on":"DoubleClicked","do":{"emitSignal":"Ping"}}]}})JSON"),
+	TEXT("UNSUPPORTED_EVENT"))
+
+UESPEC_DEFINE_REJECT_TEST(
+	FUESpecCompilerRejectUnimplementedActionTest,
+	"UESpec.Compiler.Reject.UnimplementedAction",
+	TEXT(R"JSON({"apiVersion":"0.2","kind":"Component","name":"BadAction","root":{"type":"Button","id":"slotQ","actions":[{"on":"Clicked","do":{"playAnim":"Pulse"}}]}})JSON"),
+	TEXT("UNSUPPORTED_ACTION"))
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUESpecCompilerRejectConverterWithoutFunctionTest,
+	"UESpec.Compiler.Reject.ConverterWithoutFunction",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUESpecCompilerRejectConverterWithoutFunctionTest::RunTest(const FString& Parameters)
+{
+	// A converter registered in the project registry but with no Conv_ function can never compile; validation must say so.
+	FScopedRegistryOverride RegistryOverride;
+	FUESpecConverterRegistration Converter;
+	Converter.Name = TEXT("CooldownLabel");
+	Converter.Signature = TEXT("CooldownLabel(Seconds: float) -> FText");
+	Converter.OutputType = TEXT("FText");
+	RegistryOverride.SetConverters({ Converter });
+
+	UUESpecCompilerSubsystem* Compiler = GetCompilerSubsystem(*this);
+	if (!Compiler)
+	{
+		return false;
+	}
+
+	FUESpecCompilerResult Result;
+	Compiler->ValidateJsonText(
+		TEXT(R"JSON({"apiVersion":"0.2","kind":"Component","name":"RegistryOnlyConverter","root":{"type":"TextBlock","id":"slotQ","content":{"bind":"SkillLabel","convert":"CooldownLabel"}}})JSON"),
+		Result);
+
+	TestFalse(TEXT("Validation rejects a converter with no Conv_ function"), Result.bOk);
+	TestTrue(TEXT("Compiler emits code INVALID_CONVERTER"), HasErrorCode(Result, TEXT("INVALID_CONVERTER")));
+	TestFalse(TEXT("Registered converter is not reported as unknown"), HasErrorCode(Result, TEXT("UNKNOWN_CONVERTER")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUESpecCompilerAcceptValidHudSpecTest,
 	"UESpec.Compiler.Accept.ValidHudSpec",

@@ -81,6 +81,24 @@ struct UESPECRUNTIME_API FUESpecSurfaceSignalEntry
 };
 
 USTRUCT(BlueprintType)
+struct UESPECRUNTIME_API FUESpecSurfaceActionEntry
+{
+	GENERATED_BODY()
+
+	static constexpr const TCHAR* StatusSupported = TEXT("supported");
+	static constexpr const TCHAR* StatusUnimplemented = TEXT("unimplemented");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UESpec")
+	FString Name;
+
+	/** "supported" or "unimplemented" (declared in the schema, rejected by validation). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UESpec")
+	FString Status;
+
+	bool IsSupported() const { return Status == StatusSupported; }
+};
+
+USTRUCT(BlueprintType)
 struct UESPECRUNTIME_API FUESpecSupportSurfaceSnapshot
 {
 	GENERATED_BODY()
@@ -113,10 +131,10 @@ struct UESPECRUNTIME_API FUESpecSupportSurfaceSnapshot
 	TArray<FUESpecSurfaceSignalEntry> Signals;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UESpec")
-	TArray<FString> ActionEvents;
+	TArray<FUESpecSurfaceActionEntry> ActionEvents;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UESpec")
-	TArray<FString> ActionPrimitives;
+	TArray<FUESpecSurfaceActionEntry> ActionPrimitives;
 };
 
 UCLASS()
@@ -144,6 +162,10 @@ public:
 	void RegisterSignalSurface(const FString& Name);
 
 	FUESpecSupportSurfaceSnapshot BuildSnapshot() const;
+
+	/** Action "on" events and actionBlock primitives with their implementation status; validation rejects unimplemented ones. */
+	static TArray<FUESpecSurfaceActionEntry> GetActionEventSurface();
+	static TArray<FUESpecSurfaceActionEntry> GetActionPrimitiveSurface();
 
 private:
 	UPROPERTY(Transient)

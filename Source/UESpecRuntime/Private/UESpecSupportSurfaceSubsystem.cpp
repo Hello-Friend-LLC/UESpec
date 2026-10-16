@@ -232,36 +232,54 @@ namespace UE::UESpec::Private
 		};
 	}
 
-	TArray<FString> GetActionEvents()
+	static FUESpecSurfaceActionEntry MakeActionEntry(const TCHAR* Name, const TCHAR* Status)
 	{
-		return
-		{
-			TEXT("Clicked"),
-			TEXT("Pressed"),
-			TEXT("Released"),
-			TEXT("Hovered"),
-			TEXT("Unhovered"),
-			TEXT("FocusReceived"),
-			TEXT("FocusLost"),
-			TEXT("DoubleClicked"),
-			TEXT("LongPressed"),
-			TEXT("DragDetected"),
-			TEXT("Drop")
-		};
+		FUESpecSurfaceActionEntry Entry;
+		Entry.Name = Name;
+		Entry.Status = Status;
+		return Entry;
 	}
+}
 
-	TArray<FString> GetActionPrimitives()
+TArray<FUESpecSurfaceActionEntry> UUESpecSupportSurfaceSubsystem::GetActionEventSurface()
+{
+	using UE::UESpec::Private::MakeActionEntry;
+	const TCHAR* const Supported = FUESpecSurfaceActionEntry::StatusSupported;
+	const TCHAR* const Unimplemented = FUESpecSurfaceActionEntry::StatusUnimplemented;
+
+	// Supported = has a delegate mapping in UESpecEventGraphBuilder TryResolveDelegateProperty.
+	return
 	{
-		return
-		{
-			TEXT("openLayer"),
-			TEXT("closeLayer"),
-			TEXT("setState"),
-			TEXT("callVM"),
-			TEXT("playAnim"),
-			TEXT("emitSignal")
-		};
-	}
+		MakeActionEntry(TEXT("Clicked"), Supported),
+		MakeActionEntry(TEXT("Pressed"), Supported),
+		MakeActionEntry(TEXT("Released"), Supported),
+		MakeActionEntry(TEXT("Hovered"), Supported),
+		MakeActionEntry(TEXT("Unhovered"), Supported),
+		MakeActionEntry(TEXT("FocusReceived"), Unimplemented),
+		MakeActionEntry(TEXT("FocusLost"), Unimplemented),
+		MakeActionEntry(TEXT("DoubleClicked"), Unimplemented),
+		MakeActionEntry(TEXT("LongPressed"), Unimplemented),
+		MakeActionEntry(TEXT("DragDetected"), Unimplemented),
+		MakeActionEntry(TEXT("Drop"), Unimplemented)
+	};
+}
+
+TArray<FUESpecSurfaceActionEntry> UUESpecSupportSurfaceSubsystem::GetActionPrimitiveSurface()
+{
+	using UE::UESpec::Private::MakeActionEntry;
+	const TCHAR* const Supported = FUESpecSurfaceActionEntry::StatusSupported;
+	const TCHAR* const Unimplemented = FUESpecSurfaceActionEntry::StatusUnimplemented;
+
+	// Supported = built by UESpecEventGraphBuilder BuildActionBlock.
+	return
+	{
+		MakeActionEntry(TEXT("openLayer"), Supported),
+		MakeActionEntry(TEXT("closeLayer"), Supported),
+		MakeActionEntry(TEXT("setState"), Supported),
+		MakeActionEntry(TEXT("callVM"), Supported),
+		MakeActionEntry(TEXT("playAnim"), Unimplemented),
+		MakeActionEntry(TEXT("emitSignal"), Supported)
+	};
 }
 
 void UUESpecSupportSurfaceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -408,8 +426,8 @@ FUESpecSupportSurfaceSnapshot UUESpecSupportSurfaceSubsystem::BuildSnapshot() co
 	Snapshot.Kinds = UE::UESpec::Private::GetKindEntries();
 	Snapshot.StyleTokens = RegisteredStyleTokenSurfaces;
 	Snapshot.Signals = RegisteredSignalSurfaces;
-	Snapshot.ActionEvents = UE::UESpec::Private::GetActionEvents();
-	Snapshot.ActionPrimitives = UE::UESpec::Private::GetActionPrimitives();
+	Snapshot.ActionEvents = GetActionEventSurface();
+	Snapshot.ActionPrimitives = GetActionPrimitiveSurface();
 
 	Snapshot.RegisteredComponents.Sort([](const FUESpecSurfaceWidgetEntry& A, const FUESpecSurfaceWidgetEntry& B)
 	{

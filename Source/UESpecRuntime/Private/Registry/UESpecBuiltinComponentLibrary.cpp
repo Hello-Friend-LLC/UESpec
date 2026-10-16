@@ -114,10 +114,7 @@ namespace UE::UESpec::ComponentLibrary
 		AddConverter(TEXT("BoolToVisibility"), TEXT("BoolToVisibility(bValue: bool) -> ESlateVisibility"), TEXT("ESlateVisibility"), TEXT("Maps booleans to Visible or Collapsed visibility."));
 		AddConverter(TEXT("Negate"), TEXT("Negate(bValue: bool) -> bool"), TEXT("bool"), TEXT("Negates a boolean input."));
 		AddConverter(TEXT("Stringify"), TEXT("Stringify(Value: FString) -> FString"), TEXT("FString"), TEXT("Returns the original string value unchanged."));
-		AddConverter(TEXT("SignedDeltaText"), TEXT("SignedDeltaText(Value: float) -> FText"), TEXT("FText"), TEXT("Formats combat deltas like -248 or +520 with a leading sign."));
-		AddConverter(TEXT("QuestProgressText"), TEXT("QuestProgressText(Current: int32, Required: int32) -> FText"), TEXT("FText"), TEXT("Formats quest tracker progress as X / Y."));
-		AddConverter(TEXT("ItemPowerText"), TEXT("ItemPowerText(Value: int32) -> FText"), TEXT("FText"), TEXT("Formats an item power number like +412."));
-		AddConverter(TEXT("ChatChannelPrefix"), TEXT("ChatChannelPrefix(Channel: FString, Speaker: FString) -> FText"), TEXT("FText"), TEXT("Formats a chat speaker label with its channel prefix."));
+		// Every built-in converter needs a matching UUESpecConverterLibrary::Conv_<Name>; the binding builder resolves converters only there.
 	}
 
 	void GetBuiltinStyleTokens(TArray<FUESpecStyleTokenRegistration>& OutStyleTokens)

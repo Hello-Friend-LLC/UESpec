@@ -117,7 +117,8 @@ Use the MCP repo when integrating with Claude Desktop, Codex, or other MCP-capab
 
 - The plugin currently targets UE 5.4.
 - `bindingMode: "manual"` is the supported path for AngelScript ViewModels. Full MVVM FieldNotify parity for AngelScript is not claimed.
-- Complex bind paths with array indexes, such as `skills[0].cooldownProgress`, are skipped by the binding builder and logged as warnings instead of emitted as hard compiler errors. See `docs/round4-report.md` section 3.5.
+- Complex bind paths with array indexes or calls, such as `skills[0].cooldownProgress`, are not supported: compile fails with `UNSUPPORTED_BINDING_PATH`. Unresolved paths fail with `UNRESOLVED_BINDING_PATH`, content binds on widgets that are not TextBlock/ProgressBar (or subclasses) with `UNSUPPORTED_BINDING_TARGET`, and mistyped converters with `INVALID_CONVERTER`. See `docs/round4-report.md` section 3.5.
+- Action events `FocusReceived`, `FocusLost`, `DoubleClicked`, `LongPressed`, `DragDetected`, `Drop` and the `playAnim` primitive are declared but unimplemented (`"status": "unimplemented"` in the support surface); validation rejects them with `UNSUPPORTED_EVENT` / `UNSUPPORTED_ACTION`.
 - AngelScript widget-base inheritance was explored but not promoted to the supported authoring surface.
 - The Round 6 component widgets are lightweight host classes for generation/test coverage, not final production art.
 - Real end-to-end use still requires a local Unreal project and compatible plugin dependencies.
