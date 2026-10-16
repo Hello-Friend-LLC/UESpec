@@ -8,6 +8,9 @@ namespace UnrealBuildTool.Rules
 		{
 			PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+			// Test files each define same-named helpers in anonymous namespaces; unity blobs merge them.
+			bUseUnity = false;
+
 			PrivateDependencyModuleNames.AddRange(
 				new[]
 				{
