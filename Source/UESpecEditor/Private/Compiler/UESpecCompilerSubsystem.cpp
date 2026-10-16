@@ -20,6 +20,18 @@
 #include "Dom/JsonValue.h"
 #include "UESpecJsonCompat.h"
 #include "WidgetBlueprintFactory.h"
+#include "Animation/WidgetAnimation.h"
+#include "Compiler/UESpecSha256.h"
+#include "EdGraph/EdGraph.h"
+#include "Editor.h"
+#include "HAL/FileManager.h"
+#include "Interfaces/IPluginManager.h"
+#include "MVVMBlueprintView.h"
+#include "MVVMBlueprintViewModelContext.h"
+#include "MVVMEditorSubsystem.h"
+#include "PackageTools.h"
+#include "Subsystems/AssetEditorSubsystem.h"
+#include "UObject/UObjectHash.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Internationalization/Regex.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -1125,6 +1137,245 @@ namespace UE::UESpec::Editor::Private
 		ObjectTools::DeleteSingleObject(WidgetBlueprint, false);
 		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 	}
+
+	// ---- Asset identity: deterministic WBP_<name>, ownership tags, in-place update (HF) ----
+
+	static FString MakeGeneratedAssetName(const FString& SpecName)
+	{
+		return FString::Printf(TEXT("WBP_%s"), *SpecName);
+	}
+
+	static FString GetGeneratorName()
+	{
+		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UESpec"));
+		const FString Version = Plugin.IsValid() ? Plugin->GetDescriptor().VersionName : FString(TEXT("unknown"));
+		return FString::Printf(TEXT("UESpecCompilerSubsystem/%s"), *Version);
+	}
+
+	static FString GetOwnershipSpecName(const UWidgetBlueprint& WidgetBlueprint)
+	{
+		const UObject* const Defaults = WidgetBlueprint.GeneratedClass ? WidgetBlueprint.GeneratedClass->GetDefaultObject() : nullptr;
+		if (const UUESpecWidgetBase* const WidgetDefaults = Cast<UUESpecWidgetBase>(Defaults))
+		{
+			return WidgetDefaults->UESpecSpecName;
+		}
+		if (const UUESpecActivatableWidgetBase* const ActivatableDefaults = Cast<UUESpecActivatableWidgetBase>(Defaults))
+		{
+			return ActivatableDefaults->UESpecSpecName;
+		}
+		return FString();
+	}
+
+	template <typename TWidgetBase>
+	static void SetOwnershipTags(TWidgetBase& Defaults, const FString& SpecName, const FString& SpecHash, const FString& Generator)
+	{
+		Defaults.UESpecSpecName = SpecName;
+		Defaults.UESpecSpecHash = SpecHash;
+		Defaults.UESpecGenerator = Generator;
+	}
+
+	// Written on the generated class CDO so UBlueprint::GetAssetRegistryTags publishes them (queryable without loading).
+	static void ApplyOwnershipTags(UWidgetBlueprint& WidgetBlueprint, const FString& SpecName, const FString& SpecHash)
+	{
+		UObject* const Defaults = WidgetBlueprint.GeneratedClass ? WidgetBlueprint.GeneratedClass->GetDefaultObject() : nullptr;
+		const FString Generator = GetGeneratorName();
+		if (UUESpecWidgetBase* const WidgetDefaults = Cast<UUESpecWidgetBase>(Defaults))
+		{
+			SetOwnershipTags(*WidgetDefaults, SpecName, SpecHash, Generator);
+		}
+		else if (UUESpecActivatableWidgetBase* const ActivatableDefaults = Cast<UUESpecActivatableWidgetBase>(Defaults))
+		{
+			SetOwnershipTags(*ActivatableDefaults, SpecName, SpecHash, Generator);
+		}
+	}
+
+	// Compile-time defaults the compiler owns go back to the native parent's values, so a spec that drops
+	// e.g. its viewModel does not inherit the previous build's ViewModelClass/StateMachine/ManualBindings.
+	template <typename TWidgetBase>
+	static void ResetCompilerOwnedDefaults(TWidgetBase& Defaults)
+	{
+		const TWidgetBase* const NativeDefaults = GetDefault<TWidgetBase>();
+		Defaults.WidgetKind = NativeDefaults->WidgetKind;
+		Defaults.ViewModelClass = NativeDefaults->ViewModelClass;
+		Defaults.ViewModelContext = NativeDefaults->ViewModelContext;
+		Defaults.BindingMode = NativeDefaults->BindingMode;
+		Defaults.ManualBindings = NativeDefaults->ManualBindings;
+		Defaults.StateMachine = NativeDefaults->StateMachine;
+	}
+
+	static void RenameToTransientPackage(UObject& Object)
+	{
+		const FName TrashName = MakeUniqueObjectName(GetTransientPackage(), Object.GetClass(), *FString::Printf(TEXT("TRASH_%s"), *Object.GetName()));
+		Object.Rename(*TrashName.ToString(), GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+	}
+
+	static void CloseAssetEditorsFor(UWidgetBlueprint& WidgetBlueprint)
+	{
+		if (GEditor)
+		{
+			if (UAssetEditorSubsystem* const AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+			{
+				AssetEditorSubsystem->CloseAllEditorsForAsset(&WidgetBlueprint);
+			}
+		}
+	}
+
+	/**
+	 * Strips everything a previous compile generated from a compiler-owned WidgetBlueprint before it is rebuilt in place:
+	 * (1) widgets move to the transient package (ConstructWidget(..., FName(WidgetId)) would collide with same-named ones),
+	 * (2) MVVM bindings and ViewModel contexts are removed (AddBinding only appends; EnsureViewModelContext reuses by name),
+	 * (3) every event-graph node is removed (FindOrCreateBoundEvent would reuse stale bound events and their chains),
+	 * (4) compiler-owned CDO defaults are reset. The asset object, its package and BlueprintGuid are kept.
+	 */
+	static void ResetGeneratedWidgetBlueprintContent(UWidgetBlueprint& WidgetBlueprint)
+	{
+		WidgetBlueprint.Modify();
+
+		// RemoveViewModels/MarkBlueprintAsStructurallyModified below compile the blueprint against the emptied tree; with
+		// the old GUID map in place ValidateAndFixUpVariableGuids would ensure for every trashed widget. Park the map and
+		// restore it at the end so ReconcileWidgetVariableGuids can keep same-named widgets' GUIDs after the rebuild.
+		TMap<FName, FGuid> ParkedVariableGuids = MoveTemp(WidgetBlueprint.WidgetVariableNameToGuidMap);
+		WidgetBlueprint.WidgetVariableNameToGuidMap.Reset();
+
+		if (UWidgetTree* const WidgetTree = WidgetBlueprint.WidgetTree)
+		{
+			TArray<UWidget*> OldWidgets;
+			WidgetTree->GetAllWidgets(OldWidgets);
+
+			// Also catch widgets that are outered to the tree but no longer reachable from its root.
+			TArray<UObject*> TreeSubobjects;
+			GetObjectsWithOuter(WidgetTree, TreeSubobjects, EGetObjectsFlags::None);
+			for (UObject* const Subobject : TreeSubobjects)
+			{
+				if (UWidget* const Widget = Cast<UWidget>(Subobject))
+				{
+					OldWidgets.AddUnique(Widget);
+				}
+			}
+
+			WidgetTree->Modify();
+			WidgetTree->RootWidget = nullptr;
+			for (UWidget* const OldWidget : OldWidgets)
+			{
+				if (OldWidget && OldWidget->GetOuter() == WidgetTree)
+				{
+					RenameToTransientPackage(*OldWidget);
+				}
+			}
+		}
+
+		if (UMVVMEditorSubsystem* const MVVMEditorSubsystem = GEditor ? GEditor->GetEditorSubsystem<UMVVMEditorSubsystem>() : nullptr)
+		{
+			if (UMVVMBlueprintView* const BlueprintView = MVVMEditorSubsystem->GetView(&WidgetBlueprint))
+			{
+				BlueprintView->Modify();
+				for (int32 BindingIndex = BlueprintView->GetNumBindings() - 1; BindingIndex >= 0; --BindingIndex)
+				{
+					BlueprintView->RemoveBindingAt(BindingIndex);
+				}
+
+				TArray<FGuid> ViewModelIds;
+				for (const FMVVMBlueprintViewModelContext& ViewModelContext : BlueprintView->GetViewModels())
+				{
+					ViewModelIds.Add(ViewModelContext.GetViewModelId());
+				}
+				if (ViewModelIds.Num() > 0)
+				{
+					BlueprintView->RemoveViewModels(MakeArrayView(ViewModelIds));
+				}
+			}
+		}
+
+		for (UEdGraph* const Graph : WidgetBlueprint.UbergraphPages)
+		{
+			if (!Graph)
+			{
+				continue;
+			}
+
+			const TArray<UEdGraphNode*> GraphNodes = Graph->Nodes;
+			for (UEdGraphNode* const Node : GraphNodes)
+			{
+				if (Node)
+				{
+					FBlueprintEditorUtils::RemoveNode(&WidgetBlueprint, Node, /*bDontRecompile*/ true);
+				}
+			}
+		}
+
+		UObject* const Defaults = WidgetBlueprint.GeneratedClass ? WidgetBlueprint.GeneratedClass->GetDefaultObject() : nullptr;
+		if (UUESpecWidgetBase* const WidgetDefaults = Cast<UUESpecWidgetBase>(Defaults))
+		{
+			ResetCompilerOwnedDefaults(*WidgetDefaults);
+		}
+		else if (UUESpecActivatableWidgetBase* const ActivatableDefaults = Cast<UUESpecActivatableWidgetBase>(Defaults))
+		{
+			ResetCompilerOwnedDefaults(*ActivatableDefaults);
+			ActivatableDefaults->LayerRoute = GetDefault<UUESpecActivatableWidgetBase>()->LayerRoute;
+		}
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&WidgetBlueprint);
+
+		WidgetBlueprint.WidgetVariableNameToGuidMap = MoveTemp(ParkedVariableGuids);
+	}
+
+	// Keeps WidgetVariableNameToGuidMap in step with the rebuilt tree: same-named widgets keep their GUID, new ones get a
+	// deterministic one, removed ones are dropped. Without this the widget compiler's ValidateAndFixUpVariableGuids raises
+	// ensureAlways for every added/removed widget on an in-place update. An empty map is left for the compiler to populate.
+	static void ReconcileWidgetVariableGuids(UWidgetBlueprint& WidgetBlueprint)
+	{
+		TMap<FName, FGuid>& GuidMap = WidgetBlueprint.WidgetVariableNameToGuidMap;
+		if (GuidMap.IsEmpty())
+		{
+			return;
+		}
+
+		TSet<FName> LiveVariableNames;
+		WidgetBlueprint.ForEachSourceWidget([&GuidMap, &LiveVariableNames](UWidget* Widget)
+		{
+			LiveVariableNames.Add(Widget->GetFName());
+			if (!GuidMap.Contains(Widget->GetFName()))
+			{
+				GuidMap.Add(Widget->GetFName(), FGuid::NewDeterministicGuid(Widget->GetPathName()));
+			}
+		});
+
+		for (const UWidgetAnimation* const Animation : WidgetBlueprint.Animations)
+		{
+			if (Animation)
+			{
+				LiveVariableNames.Add(Animation->GetFName());
+			}
+		}
+
+		for (auto It = GuidMap.CreateIterator(); It; ++It)
+		{
+			if (!LiveVariableNames.Contains(It.Key()))
+			{
+				It.RemoveCurrent();
+			}
+		}
+	}
+
+	// Failed in-place rebuild: never save; drop the in-memory edits by reloading the last saved package.
+	static void RestoreWidgetBlueprintFromDisk(UWidgetBlueprint& WidgetBlueprint, FUESpecCompilerResult& OutResult)
+	{
+		CloseAssetEditorsFor(WidgetBlueprint);
+
+		TArray<UPackage*> PackagesToReload;
+		PackagesToReload.Add(WidgetBlueprint.GetPackage());
+
+		FText ReloadError;
+		if (!UPackageTools::ReloadPackages(PackagesToReload, ReloadError, EReloadPackagesInteractionMode::AssumePositive))
+		{
+			UUESpecCompilerSubsystem::AddError(
+				OutResult,
+				TEXT("ASSET_RESTORE_FAILED"),
+				TEXT("$"),
+				FString::Printf(TEXT("Failed to restore '%s' to its last saved state: %s"), *WidgetBlueprint.GetPathName(), *ReloadError.ToString()),
+				TEXT("Reload the asset manually (or revert it in source control) before compiling again."));
+		}
+	}
 }
 
 bool UUESpecCompilerSubsystem::ValidateJsonText(const FString& JsonText, FUESpecCompilerResult& OutResult) const
@@ -1214,48 +1465,207 @@ bool UUESpecCompilerSubsystem::CompileJsonFileToWidgetBlueprint(const FString& S
 
 	FString SpecName;
 	RootObject->TryGetStringField(TEXT("name"), SpecName);
+	OutResult.SpecHash = ComputeSpecHash(OutResult.NormalizedJson);
 
+	// Semantic validation has passed; only now is the target asset resolved (and possibly loaded).
 	FString AssetPath;
-	UWidgetBlueprint* WidgetBlueprint = CreateWidgetBlueprintAsset(SpecName, Kind, OutputDirectory, AssetPath, OutResult);
-	if (!WidgetBlueprint)
+	UWidgetBlueprint* WidgetBlueprint = nullptr;
+	if (!ResolveTargetWidgetBlueprint(SpecName, Kind, OutputDirectory, AssetPath, WidgetBlueprint, OutResult))
 	{
 		OutResult.bOk = false;
 		return false;
 	}
+
+	const bool bUpdatingExisting = WidgetBlueprint != nullptr;
+	if (bUpdatingExisting)
+	{
+		UE::UESpec::Editor::Private::CloseAssetEditorsFor(*WidgetBlueprint);
+		UE::UESpec::Editor::Private::ResetGeneratedWidgetBlueprintContent(*WidgetBlueprint);
+	}
+	else
+	{
+		WidgetBlueprint = CreateWidgetBlueprintAsset(SpecName, Kind, OutputDirectory, AssetPath, OutResult);
+		if (!WidgetBlueprint)
+		{
+			OutResult.bOk = false;
+			return false;
+		}
+	}
+
+	// A new asset is deleted on failure; an updated one is never saved and is reloaded from its last saved state.
+	const auto FailCompile = [&OutResult, WidgetBlueprint, bUpdatingExisting]()
+	{
+		if (bUpdatingExisting)
+		{
+			UE::UESpec::Editor::Private::RestoreWidgetBlueprintFromDisk(*WidgetBlueprint, OutResult);
+		}
+		else
+		{
+			UE::UESpec::Editor::Private::CleanupFailedWidgetBlueprint(WidgetBlueprint);
+		}
+		OutResult.bOk = false;
+		return false;
+	};
 
 	if (!BuildWidgetBlueprintTree(*WidgetBlueprint, RootObject, OutResult))
 	{
-		UE::UESpec::Editor::Private::CleanupFailedWidgetBlueprint(WidgetBlueprint);
-		OutResult.bOk = false;
-		return false;
+		return FailCompile();
 	}
 
+	UE::UESpec::Editor::Private::ReconcileWidgetVariableGuids(*WidgetBlueprint);
 	UE::UESpec::Editor::Private::ApplyBlueprintDefaultsFromSpec(*WidgetBlueprint, RootObject);
+	UE::UESpec::Editor::Private::ApplyOwnershipTags(*WidgetBlueprint, SpecName, OutResult.SpecHash);
 
 	if (!FUESpecBindingBuilder::Build(*WidgetBlueprint, RootObject, OutResult))
 	{
-		UE::UESpec::Editor::Private::CleanupFailedWidgetBlueprint(WidgetBlueprint);
-		OutResult.bOk = false;
-		return false;
+		return FailCompile();
 	}
 
 	if (!FUESpecEventGraphBuilder::Build(*WidgetBlueprint, RootObject, OutResult))
 	{
-		UE::UESpec::Editor::Private::CleanupFailedWidgetBlueprint(WidgetBlueprint);
-		OutResult.bOk = false;
-		return false;
+		return FailCompile();
 	}
 
 	if (!SaveWidgetBlueprintAsset(*WidgetBlueprint, AssetPath, OutResult))
 	{
-		UE::UESpec::Editor::Private::CleanupFailedWidgetBlueprint(WidgetBlueprint);
-		OutResult.bOk = false;
-		return false;
+		return FailCompile();
 	}
 
 	OutResult.GeneratedAssets.Reset();
 	OutResult.GeneratedAssets.Add(AssetPath);
+	OutResult.AssetPath = AssetPath;
+	OutResult.BlueprintGuid = WidgetBlueprint->GetBlueprintGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	OutResult.AssetAction = bUpdatingExisting ? TEXT("updated") : TEXT("created");
+	OutResult.SavedPackageFile = FPaths::ConvertRelativePathToFull(FPackageName::LongPackageNameToFilename(
+		FPackageName::ObjectPathToPackageName(AssetPath), FPackageName::GetAssetPackageExtension()));
 	OutResult.bOk = true;
+	return true;
+}
+
+FString UUESpecCompilerSubsystem::ComputeSpecHash(const FString& NormalizedJson)
+{
+	return UE::UESpec::Editor::Sha256::HashUtf8ToHex(NormalizedJson);
+}
+
+bool UUESpecCompilerSubsystem::ResolveTargetWidgetBlueprint(const FString& SpecName, const FString& Kind, const FString& OutputDirectory, FString& OutAssetPath, UWidgetBlueprint*& OutExistingWidgetBlueprint, FUESpecCompilerResult& OutResult)
+{
+	OutExistingWidgetBlueprint = nullptr;
+
+	const FString PackageDirectory = OutputDirectory.IsEmpty() ? FString(UE::UESpec::Editor::Private::DefaultOutputDirectory) : OutputDirectory;
+	if (!FPackageName::IsValidLongPackageName(PackageDirectory))
+	{
+		AddError(
+			OutResult,
+			TEXT("INVALID_OUTPUT_DIRECTORY"),
+			TEXT("$"),
+			FString::Printf(TEXT("Output directory '%s' is not a valid long package path."), *PackageDirectory),
+			TEXT("Use a package path such as /Game/UI/Generated."));
+		return false;
+	}
+
+	UClass* const ParentClass = ResolveWidgetBlueprintParentClass(Kind);
+	if (!ParentClass)
+	{
+		AddError(
+			OutResult,
+			TEXT("UNSUPPORTED_WIDGET_KIND"),
+			TEXT("kind"),
+			FString::Printf(TEXT("kind '%s' does not map to a WidgetBlueprint base class yet."), *Kind),
+			TEXT("Use HUD/Menu/Popup/Modal/Debug/WorldSpace/Component for the current compiler."));
+		return false;
+	}
+
+	const FString AssetName = UE::UESpec::Editor::Private::MakeGeneratedAssetName(SpecName);
+	const FString PackageName = UE::UESpec::Editor::Private::MakePackagePath(PackageDirectory, AssetName);
+	FText InvalidNameReason;
+	if (!FPackageName::IsValidLongPackageName(PackageName, /*bIncludeReadOnlyRoots*/ false, &InvalidNameReason))
+	{
+		AddError(
+			OutResult,
+			TEXT("INVALID_ASSET_NAME"),
+			TEXT("name"),
+			FString::Printf(TEXT("'%s' is not a valid asset package name: %s"), *PackageName, *InvalidNameReason.ToString()),
+			TEXT("Use a spec name made of letters, digits and underscores."));
+		return false;
+	}
+	OutAssetPath = PackageName + TEXT(".") + AssetName;
+
+	UObject* ExistingObject = nullptr;
+	if (UPackage* const ExistingPackage = FindPackage(nullptr, *PackageName))
+	{
+		ExistingObject = FindObject<UObject>(ExistingPackage, *AssetName);
+	}
+	if (!IsValid(ExistingObject) && FPackageName::DoesPackageExist(PackageName))
+	{
+		ExistingObject = LoadObject<UObject>(nullptr, *OutAssetPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!IsValid(ExistingObject))
+		{
+			AddError(
+				OutResult,
+				TEXT("TARGET_NOT_GENERATED"),
+				TEXT("name"),
+				FString::Printf(TEXT("Package '%s' exists but holds no loadable asset named '%s'; the compiler never overwrites it."), *PackageName, *AssetName),
+				TEXT("Rename the spec, pick another output directory, or remove the existing package."));
+			return false;
+		}
+	}
+
+	if (!IsValid(ExistingObject))
+	{
+		return true;
+	}
+
+	UWidgetBlueprint* const ExistingWidgetBlueprint = Cast<UWidgetBlueprint>(ExistingObject);
+	if (!ExistingWidgetBlueprint || UE::UESpec::Editor::Private::GetOwnershipSpecName(*ExistingWidgetBlueprint).IsEmpty())
+	{
+		AddError(
+			OutResult,
+			TEXT("TARGET_NOT_GENERATED"),
+			TEXT("name"),
+			FString::Printf(TEXT("'%s' (%s) already exists and has no UESpecSpecName ownership tag; the compiler only updates assets it generated."), *OutAssetPath, *ExistingObject->GetClass()->GetName()),
+			TEXT("Rename the spec, pick another output directory, or move the existing asset out of the way."));
+		return false;
+	}
+
+	if (ExistingWidgetBlueprint->ParentClass != ParentClass)
+	{
+		AddError(
+			OutResult,
+			TEXT("TARGET_PARENT_CLASS_MISMATCH"),
+			TEXT("kind"),
+			FString::Printf(TEXT("'%s' derives from '%s' but kind '%s' needs '%s'; an in-place update cannot reparent it."),
+				*OutAssetPath,
+				ExistingWidgetBlueprint->ParentClass ? *ExistingWidgetBlueprint->ParentClass->GetName() : TEXT("None"),
+				*Kind,
+				*ParentClass->GetName()),
+			TEXT("Delete the generated asset (or rename the spec) to change its kind."));
+		return false;
+	}
+
+	if (GEditor && GEditor->IsPlaySessionInProgress())
+	{
+		AddError(
+			OutResult,
+			TEXT("TARGET_UPDATE_REQUIRES_PIE_OFF"),
+			TEXT("$"),
+			FString::Printf(TEXT("'%s' cannot be rebuilt in place while a PIE session is running."), *OutAssetPath),
+			TEXT("Stop PIE, then compile again."));
+		return false;
+	}
+
+	const FString PackageFile = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+	if (IFileManager::Get().FileExists(*PackageFile) && IFileManager::Get().IsReadOnly(*PackageFile))
+	{
+		AddError(
+			OutResult,
+			TEXT("TARGET_READ_ONLY"),
+			TEXT("$"),
+			FString::Printf(TEXT("'%s' is read-only on disk; the compiler does no source-control checkout."), *FPaths::ConvertRelativePathToFull(PackageFile)),
+			TEXT("Open the file for edit in source control (p4 edit), then compile again."));
+		return false;
+	}
+
+	OutExistingWidgetBlueprint = ExistingWidgetBlueprint;
 	return true;
 }
 
@@ -1567,21 +1977,17 @@ UWidgetBlueprint* UUESpecCompilerSubsystem::CreateWidgetBlueprintAsset(const FSt
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
-	const FString DesiredAssetName = FString::Printf(TEXT("WBP_%s"), *SpecName);
 
-	FString UniquePackageName;
-	FString UniqueAssetName;
-	AssetToolsModule.Get().CreateUniqueAssetName(
-		UE::UESpec::Editor::Private::MakePackagePath(PackageDirectory, DesiredAssetName),
-		TEXT(""),
-		UniquePackageName,
-		UniqueAssetName);
+	// HF: deterministic spec->asset identity. The asset is always <OutputDirectory>/WBP_<name> (no CreateUniqueAssetName
+	// _1/_2 variants); CompileJsonFileToWidgetBlueprint resolves an existing compiler-owned asset first and updates it in place.
+	const FString AssetName = UE::UESpec::Editor::Private::MakeGeneratedAssetName(SpecName);
+	const FString PackageName = UE::UESpec::Editor::Private::MakePackagePath(PackageDirectory, AssetName);
 
 	UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
 	Factory->ParentClass = ParentClass;
 
 	UWidgetBlueprint* WidgetBlueprint = Cast<UWidgetBlueprint>(
-		AssetToolsModule.Get().CreateAsset(UniqueAssetName, PackageDirectory, UWidgetBlueprint::StaticClass(), Factory));
+		AssetToolsModule.Get().CreateAsset(AssetName, PackageDirectory, UWidgetBlueprint::StaticClass(), Factory));
 
 	if (!WidgetBlueprint)
 	{
@@ -1589,12 +1995,12 @@ UWidgetBlueprint* UUESpecCompilerSubsystem::CreateWidgetBlueprintAsset(const FSt
 			OutResult,
 			TEXT("WIDGET_BLUEPRINT_CREATE_FAILED"),
 			TEXT("$"),
-			FString::Printf(TEXT("Failed to create WidgetBlueprint '%s'."), *UniqueAssetName),
+			FString::Printf(TEXT("Failed to create WidgetBlueprint '%s'."), *AssetName),
 			TEXT("Check the parent class mapping and package path."));
 		return nullptr;
 	}
 
-	OutAssetPath = UniquePackageName + TEXT(".") + UniqueAssetName;
+	OutAssetPath = PackageName + TEXT(".") + AssetName;
 	return WidgetBlueprint;
 }
 
@@ -1625,6 +2031,8 @@ bool UUESpecCompilerSubsystem::BuildWidgetBlueprintTree(UWidgetBlueprint& Widget
 
 	WidgetBlueprint.Modify();
 	WidgetBlueprint.WidgetTree->RootWidget = RootWidget;
+	// MarkBlueprintAsStructurallyModified compiles: bring the variable GUID map in step with the new tree first.
+	UE::UESpec::Editor::Private::ReconcileWidgetVariableGuids(WidgetBlueprint);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&WidgetBlueprint);
 	return OutResult.Errors.Num() == 0;
 }
@@ -1697,7 +2105,11 @@ UWidget* UUESpecCompilerSubsystem::BuildWidgetNode(UWidgetBlueprint& WidgetBluep
 	}
 
 	Widget->bIsVariable = true;
-	WidgetBlueprint.OnVariableAdded(Widget->GetFName());
+	// An in-place update keeps the previous GUID of a same-named widget (OnVariableAdded ensures on an existing entry).
+	if (!WidgetBlueprint.WidgetVariableNameToGuidMap.Contains(Widget->GetFName()))
+	{
+		WidgetBlueprint.OnVariableAdded(Widget->GetFName());
+	}
 	ApplyWidgetProperties(*Widget, NodeObject, NodePath, LocalStyleTokens, GlobalStyleTokens, OutResult);
 
 	const TArray<TSharedPtr<FJsonValue>>* ChildrenArray = nullptr;

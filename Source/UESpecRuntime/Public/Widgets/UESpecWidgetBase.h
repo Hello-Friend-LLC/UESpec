@@ -93,6 +93,18 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "UESpec|StateMachine")
 	FUESpecOnUIStateChanged OnUIStateChanged;
 
+	/** Ownership tag: name of the UISpec that generated this WidgetBlueprint. Empty = not compiler-owned. Published to the asset registry. */
+	UPROPERTY(VisibleAnywhere, AssetRegistrySearchable, BlueprintReadOnly, Category = "UESpec|Generated")
+	FString UESpecSpecName;
+
+	/** SHA-256 (lowercase hex) of the normalized UISpec JSON this WidgetBlueprint was last generated from. */
+	UPROPERTY(VisibleAnywhere, AssetRegistrySearchable, BlueprintReadOnly, Category = "UESpec|Generated")
+	FString UESpecSpecHash;
+
+	/** Generator that wrote this WidgetBlueprint (compiler name and plugin version). */
+	UPROPERTY(VisibleAnywhere, AssetRegistrySearchable, BlueprintReadOnly, Category = "UESpec|Generated")
+	FString UESpecGenerator;
+
 	UFUNCTION(BlueprintCallable, Category = "UESpec|StateMachine")
 	void SetUIState(FName NewState);
 
@@ -157,6 +169,18 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UESpec|StateMachine")
 	FUESpecOnUIStateChanged OnUIStateChanged;
+
+	/** Ownership tag: name of the UISpec that generated this WidgetBlueprint. Empty = not compiler-owned. Published to the asset registry. */
+	UPROPERTY(VisibleAnywhere, AssetRegistrySearchable, BlueprintReadOnly, Category = "UESpec|Generated")
+	FString UESpecSpecName;
+
+	/** SHA-256 (lowercase hex) of the normalized UISpec JSON this WidgetBlueprint was last generated from. */
+	UPROPERTY(VisibleAnywhere, AssetRegistrySearchable, BlueprintReadOnly, Category = "UESpec|Generated")
+	FString UESpecSpecHash;
+
+	/** Generator that wrote this WidgetBlueprint (compiler name and plugin version). */
+	UPROPERTY(VisibleAnywhere, AssetRegistrySearchable, BlueprintReadOnly, Category = "UESpec|Generated")
+	FString UESpecGenerator;
 
 	UFUNCTION(BlueprintPure, Category = "UESpec")
 	bool SupportsBackNavigation() const;

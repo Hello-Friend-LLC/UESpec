@@ -42,6 +42,11 @@ public:
 	static UClass* ResolveWidgetBlueprintParentClass(const FString& Kind);
 	static UClass* ResolveWidgetClass(const FString& WidgetType, TArray<FString>& OutCandidates);
 	static UWidgetBlueprint* CreateWidgetBlueprintAsset(const FString& SpecName, const FString& Kind, const FString& OutputDirectory, FString& OutAssetPath, FUESpecCompilerResult& OutResult);
+	/** Resolves the deterministic target <OutputDirectory>/WBP_<SpecName>. Returns false (with a TARGET_* error) when the target exists
+	 *  but must not be rebuilt; OutExistingWidgetBlueprint is set when a compiler-owned asset is there to update in place. */
+	static bool ResolveTargetWidgetBlueprint(const FString& SpecName, const FString& Kind, const FString& OutputDirectory, FString& OutAssetPath, UWidgetBlueprint*& OutExistingWidgetBlueprint, FUESpecCompilerResult& OutResult);
+	/** SHA-256 (lowercase hex) of the UTF-8 normalized UISpec JSON; the value of the UESpecSpecHash ownership tag. */
+	static FString ComputeSpecHash(const FString& NormalizedJson);
 	static bool BuildWidgetBlueprintTree(UWidgetBlueprint& WidgetBlueprint, const TSharedPtr<FJsonObject>& RootObject, FUESpecCompilerResult& OutResult);
 	static UWidget* BuildWidgetNode(UWidgetBlueprint& WidgetBlueprint, const TSharedPtr<FJsonObject>& NodeObject, const FString& NodePath, const TMap<FString, TSharedPtr<FJsonValue>>& LocalStyleTokens, const TMap<FString, FString>& GlobalStyleTokens, FUESpecCompilerResult& OutResult);
 	static bool AttachChildWidget(UWidget& ParentWidget, UWidget& ChildWidget, const TSharedPtr<FJsonObject>& ChildNodeObject, const FString& ChildPath, const TMap<FString, TSharedPtr<FJsonValue>>& LocalStyleTokens, const TMap<FString, FString>& GlobalStyleTokens, FUESpecCompilerResult& OutResult);

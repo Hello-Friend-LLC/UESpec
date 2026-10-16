@@ -34,6 +34,12 @@ namespace UnrealBuildTool.Rules
 					"UMGEditor",
 					"UESpecRuntime"
 				});
+
+			PrivateDependencyModuleNames.AddRange(
+				new[]
+				{
+					"Projects"
+				});
 		}
 	}
 }

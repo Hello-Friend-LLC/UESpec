@@ -233,6 +233,13 @@ namespace UE::UESpec::Editor::Commandlet
 			AssetArray.Add(MakeShared<FJsonValueString>(AssetPath));
 		}
 		ResultObject->SetArrayField(TEXT("generatedAssets"), AssetArray);
+
+		// Asset identity (only meaningful after a successful compile; empty strings otherwise).
+		ResultObject->SetStringField(TEXT("assetPath"), Result.AssetPath);
+		ResultObject->SetStringField(TEXT("blueprintGuid"), Result.BlueprintGuid);
+		ResultObject->SetStringField(TEXT("assetAction"), Result.AssetAction);
+		ResultObject->SetStringField(TEXT("specHash"), Result.SpecHash);
+		ResultObject->SetStringField(TEXT("savedPackageFile"), Result.SavedPackageFile);
 		return ResultObject;
 	}
 
