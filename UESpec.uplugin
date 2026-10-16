@@ -9,7 +9,7 @@
 	"CreatedByURL": "https://github.com/Mithril0rd",
 	"DocsURL": "https://github.com/Mithril0rd/uespec-public",
 	"SupportURL": "https://github.com/Mithril0rd/uespec-public/issues",
-	"EngineVersion": "5.8.3",
+	"EngineVersion": "5.8.0",
 	"EnabledByDefault": false,
 	"CanContainContent": false,
 	"IsBetaVersion": true,
